@@ -27,6 +27,8 @@
 
 ## ✅ 功能
 
+<img width="596" height="1158" alt="image" src="https://github.com/user-attachments/assets/06758a41-a431-46c1-95e1-525169fc1a2a" />
+
 - 监听群聊中的 `菜单` 关键词
 - 发送带 emoji 的互动菜单文本
 - 解析 `group_msg_reaction` 事件的 `raw_message`
