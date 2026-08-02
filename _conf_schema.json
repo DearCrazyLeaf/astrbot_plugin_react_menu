@@ -1,21 +1,24 @@
 {
   "menu_keywords": {
-    "type": "array",
+    "type": "list",
     "description": "菜单触发关键词列表",
-    "hint": "支持多个关键字，例如 [\"菜单\", \"娱乐\"]",
-    "default": ["菜单"]
+    "hint": "支持多个关键字，例如 [\"菜单\"]",
+    "default": ["菜单"],
+    "items": {
+      "type": "string"
+    }
   },
   "menu_title": {
     "type": "string",
     "description": "菜单标题文本",
-    "hint": "显示在菜单最上方的标题，例如 🎮 娱乐菜单",
-    "default": "🎮 娱乐菜单"
+    "hint": "显示在菜单最上方的标题，例如 🎮 菜单",
+    "default": "🎮 菜单"
   },
   "menu_timeout_seconds": {
     "type": "int",
     "description": "菜单有效期（秒）",
     "hint": "超过该时间后，点击 emoji 将不再触发功能",
-    "default": 600
+    "default": 60
   },
   "debounce_seconds": {
     "type": "int",
@@ -23,15 +26,38 @@
     "hint": "同一个用户对同一个 emoji 的重复点击冷却时间",
     "default": 3
   },
-  "emoji_mapping": {
-    "type": "object",
-    "description": "emoji ID 到指令的映射表",
-    "hint": "key 为 face_id，value 为 command/desc 对象",
-    "default": {
-      "128": { "command": "每日老婆", "desc": "🐷 每日老婆" },
-      "129": { "command": "每日小猪", "desc": "🐗 每日小猪" },
-      "151": { "command": "随机VTB", "desc": "🎲 随机VTB" },
-      "144": { "command": "CS开箱", "desc": "🎁 CS开箱" }
+  "menu_repeat_block": {
+    "type": "bool",
+    "description": "是否启用菜单冷却阻断",
+    "hint": "当群内已有未过期菜单时，再次发送菜单关键词将回复冷却提示，而不重新发送菜单",
+    "default": true
+  },
+  "menu_repeat_reply": {
+    "type": "string",
+    "description": "菜单冷却时的回复提示",
+    "hint": "当菜单被冷却阻断时，机器人会回复该文本",
+    "default": "当前菜单已经生效，正在冷却中，直接点表情或发序号/内容即可触发~"
+  },
+  "face_pool": {
+    "type": "list",
+    "description": "可选的备用 face_id 池",
+    "hint": "当 menu_items 中未指定 face_id 时，插件将从此池中随机分配 face_id",
+    "default": ["128", "129", "151", "144"],
+    "items": { "type": "string" }
+  },
+  "menu_items": {
+    "type": "list",
+    "description": "按顺序定义的菜单项列表",
+    "hint": "支持字符串形式（例如 '今日小猪'）或对象形式 { label, command, face_id }，command指令会自动补齐前置'/'",
+    "default": [
+      "每日老婆,抽老婆",
+      "今日小猪",
+      "随机VTB,dd"
+    ],
+    "items": {
+      "label": { "type": "string", "default": "" },
+      "command": { "type": "string", "default": "" },
+      "face_id": { "type": "string", "default": "" }
     }
   }
 }
