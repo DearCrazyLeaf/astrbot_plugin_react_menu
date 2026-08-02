@@ -1,0 +1,37 @@
+{
+  "menu_keywords": {
+    "type": "array",
+    "description": "菜单触发关键词列表",
+    "hint": "支持多个关键字，例如 [\"菜单\", \"娱乐\"]",
+    "default": ["菜单"]
+  },
+  "menu_title": {
+    "type": "string",
+    "description": "菜单标题文本",
+    "hint": "显示在菜单最上方的标题，例如 🎮 娱乐菜单",
+    "default": "🎮 娱乐菜单"
+  },
+  "menu_timeout_seconds": {
+    "type": "int",
+    "description": "菜单有效期（秒）",
+    "hint": "超过该时间后，点击 emoji 将不再触发功能",
+    "default": 600
+  },
+  "debounce_seconds": {
+    "type": "int",
+    "description": "点击防抖间隔（秒）",
+    "hint": "同一个用户对同一个 emoji 的重复点击冷却时间",
+    "default": 3
+  },
+  "emoji_mapping": {
+    "type": "object",
+    "description": "emoji ID 到指令的映射表",
+    "hint": "key 为 face_id，value 为 command/desc 对象",
+    "default": {
+      "128": { "command": "每日老婆", "desc": "🐷 每日老婆" },
+      "129": { "command": "每日小猪", "desc": "🐗 每日小猪" },
+      "151": { "command": "随机VTB", "desc": "🎲 随机VTB" },
+      "144": { "command": "CS开箱", "desc": "🎁 CS开箱" }
+    }
+  }
+}

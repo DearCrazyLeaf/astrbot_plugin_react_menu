@@ -1,0 +1,12 @@
+{
+  "menu_keywords": ["菜单"],
+  "menu_title": "🎮 娱乐菜单",
+  "menu_timeout_seconds": 600,
+  "debounce_seconds": 3,
+  "emoji_mapping": {
+    "128": { "command": "每日老婆", "desc": "🐷 每日老婆" },
+    "129": { "command": "每日小猪", "desc": "🐗 每日小猪" },
+    "151": { "command": "随机VTB", "desc": "🎲 随机VTB" },
+    "144": { "command": "CS开箱", "desc": "🎁 CS开箱" }
+  }
+}
