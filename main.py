@@ -446,11 +446,11 @@ class ReactMenuPlugin(Star):
                 logger.debug(f"[react_menu] 非 reaction 通知类型: notice_type={notice_type} raw={raw}")
                 return
 
-        # group_msg_emoji_like 没有 sub_type 字段，仅 group_msg_reaction 需要校验
+        # 按你的预期，任何表情变更事件都可以触发命令；防抖负责避免重复点击。
+        # 这里不再因为 sub_type/is_add 的值而直接跳过，避免前面几项正常、后面几项被误拦住。
         sub_type = str(raw.get("sub_type") or "").lower().strip()
-        if notice_type == "group_msg_reaction" and sub_type and sub_type != "add":
-            logger.debug(f"[react_menu] 非添加表情操作, sub_type={sub_type}, 跳过")
-            return
+        if notice_type == "group_msg_reaction" and sub_type and sub_type not in {"add", "remove", "set", "cancel", "delete", ""}:
+            logger.debug(f"[react_menu] 未识别的 reaction sub_type={sub_type}, 仍继续处理 raw={raw}")
 
         message_id = self._resolve_raw_field(raw, ("message_id", "msg_id", "message_id_str", "msgId", "messageId"))
         if not message_id:
