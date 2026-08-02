@@ -1,4 +1,4 @@
-# 表情回应菜单
+# Astrbot 表情回应菜单
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![AstrBot](https://img.shields.io/badge/AstrBot-v4.12%2B-brightgreen)
@@ -11,6 +11,9 @@
 ## ✅ 简介
 
 `astrbot_plugin_react_menu` 是一款 AstrBot 插件：群内发送 `菜单` 关键词后，插件会生成一条带 emoji 的互动菜单，群员点击 emoji 即可触发对应的娱乐插件指令。
+
+> [!NOTE]
+> 本插件面向非 QQ 官方机器人，仿造官方机器人聊天按钮触发方式实现，通过 emoji reaction 交互实现按钮式命令调用。
 
 本插件基于 aiocqhttp / NapCat `group_msg_reaction` 通知机制构建，支持从 `raw_message` 解析 reaction 事件。
 
