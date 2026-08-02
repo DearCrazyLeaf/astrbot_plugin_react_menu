@@ -3,4 +3,6 @@ display_name: 表情回应菜单
 version: 1.0.0
 author: DearCrazyLeaf
 desc: 仿造官方机器人聊天按钮触发，发送“菜单”关键词后生成 emoji 互动菜单，点击 emoji 触发对应插件指令
+support_platforms:
+  - aiocqhttp
 repo: "https://github.com/DearCrazyLeaf/astrbot_plugin_react_menu"
