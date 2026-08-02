@@ -1,7 +1,11 @@
-# Changelog
+# 版本说明
 
-## [1.0.0] - 2026-08-02
+## v1.0.0
 
+### 变更摘要
+
+- `menu_items` 字符串支持 `label/command`、`label,command`、`label command` 分隔形式。
+- 增强回环保护与防抖逻辑以提升稳定性。
 - 初始版本：表情回应菜单插件
 - 支持 `菜单` 关键词触发
 - 支持 `group_msg_reaction` 事件解析

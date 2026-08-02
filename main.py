@@ -100,15 +100,55 @@ class ReactMenuPlugin(Star):
                 text = raw_value.strip()
                 if not text:
                     continue
-                parts = text.split(" ", 1)
-                label = parts[0].strip()
-                command = parts[1].strip() if len(parts) > 1 else label
-                if not command:
-                    command = label
+                label, command = self._split_menu_item_text(text)
+                if not label or not command:
+                    continue
                 items.append({"label": label, "command": command, "face_id": ""})
                 continue
 
         return items
+
+    @staticmethod
+    def _split_menu_item_text(text: str) -> tuple[str, str]:
+        text = (text or "").strip()
+        if not text:
+            return "", ""
+
+        # 优先按逗号分隔
+        for sep in (",", "，"):
+            if sep in text:
+                left, right = text.split(sep, 1)
+                label = left.strip().lstrip("/")
+                command = right.strip()
+                if not label:
+                    label = command.lstrip("/")
+                if not command:
+                    command = label
+                return label, command
+
+        # 支持 `显示 / 指令` 或 `显示/指令`
+        if "/" in text and text.find("/") > 0:
+            left, right = text.split("/", 1)
+            label = left.strip()
+            command = right.strip()
+            if not label:
+                label = command.lstrip("/")
+            if not command:
+                command = label
+            return label, command
+
+        # 最后按第一个空格分隔为 label 和 command
+        if " " in text:
+            left, right = text.split(" ", 1)
+            label = left.strip()
+            command = right.strip()
+            if not label:
+                label = command.lstrip("/")
+            if not command:
+                command = label
+            return label, command
+
+        return text, text
 
     @staticmethod
     def _normalize_command(command: str) -> str:
