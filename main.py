@@ -29,8 +29,12 @@ class ReactMenuPlugin(Star):
 
         self.menu_keywords = self._config_get("menu_keywords", ["菜单"])
         self.menu_title = str(self._config_get("menu_title", "🎮 娱乐菜单"))
+        self.menu_header_image_url = str(self._config_get("menu_header_image_url", "") or "").strip()
+        self.menu_divider_char = str(self._config_get("menu_divider_char", "─"))[:1] or "─"
+        self.menu_divider_length = int(self._config_get("menu_divider_length", 28))
         self.menu_timeout = int(self._config_get("menu_timeout_seconds", 600))
         self.debounce_seconds = int(self._config_get("debounce_seconds", 3))
+        self.menu_max_reactions = int(self._config_get("menu_max_reactions", 8))
         self.menu_repeat_block = bool(self._config_get("menu_repeat_block", True))
         self.menu_repeat_reply = str(self._config_get("menu_repeat_reply", "当前菜单已经生效，正在冷却中，直接点表情或发序号/内容即可触发~"))
         self.face_pool = self._normalize_face_pool(self._config_get("face_pool", []))
@@ -168,10 +172,12 @@ class ReactMenuPlugin(Star):
 
         available = [fid for fid in self.face_pool if fid not in existing]
         if len(available) < len(unassigned):
-            logger.warning(
-                f"[react_menu] face_pool 可用 face_id 不足，可能出现重复ID映射：需要={len(unassigned)} 可用={len(available)}"
-            )
-            available = list(self.face_pool)
+            fallback_ids = [str(i) for i in range(128, 201) if str(i) not in existing and str(i) not in available]
+            available.extend(fallback_ids)
+            if len(available) < len(unassigned):
+                logger.warning(
+                    f"[react_menu] face_pool 可用 face_id 不足，可能出现重复ID映射或部分菜单无法贴表情：需要={len(unassigned)} 可用={len(available)}"
+                )
 
         random.shuffle(available)
         for item in unassigned:
@@ -261,10 +267,15 @@ class ReactMenuPlugin(Star):
             }
 
     def _build_text_menu(self, items: list[dict[str, str]]) -> str:
-        lines = [self.menu_title, "─" * 12]
+        lines = []
+        if self.menu_header_image_url:
+            lines.append(f"[CQ:image,file={self.menu_header_image_url}]")
+            lines.append("")
+        lines.append(self.menu_title)
+        lines.append(self.menu_divider_char * self.menu_divider_length)
         for index, item in enumerate(items, start=1):
             lines.append(f"  {index}. {item['label']}")
-        lines.append("─" * 12)
+        lines.append(self.menu_divider_char * self.menu_divider_length)
         lines.append("👆 下方按顺序贴表情，第1个表情对应第1项，第2个表情对应第2项。也可直接回复序号或菜单内容触发。")
         return "\n".join(lines)
 
@@ -305,9 +316,10 @@ class ReactMenuPlugin(Star):
             return False
 
         items = self._assign_face_ids(self.menu_items)
+        emoji_items = [item for item in items if item.get("face_id")][: self.menu_max_reactions]
         emoji_map = {
             item["face_id"]: {"command": item["command"], "label": item["label"]}
-            for item in items
+            for item in emoji_items
         }
         self._active_menus[message_id] = {
             "group_id": str(event.get_group_id()),
@@ -316,8 +328,10 @@ class ReactMenuPlugin(Star):
             "items": items,
         }
 
-        for item in items:
+        for item in emoji_items:
             face_id_str = item["face_id"]
+            if not face_id_str:
+                continue
             try:
                 face_id = int(face_id_str)
                 await bot.set_msg_emoji_like(

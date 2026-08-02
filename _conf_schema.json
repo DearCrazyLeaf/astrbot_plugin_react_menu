@@ -38,6 +38,30 @@
     "hint": "当菜单被冷却阻断时，机器人会回复该文本",
     "default": "当前菜单已经生效，正在冷却中，直接点表情或发序号/内容即可触发~"
   },
+  "menu_header_image_url": {
+    "type": "string",
+    "description": "菜单头图 URL",
+    "hint": "支持可访问的图床链接，可为空不显示头图",
+    "default": ""
+  },
+  "menu_divider_char": {
+    "type": "string",
+    "description": "菜单分割线字符",
+    "hint": "用于菜单文本中的分割线，例如 '─' 或 '-'",
+    "default": "─"
+  },
+  "menu_divider_length": {
+    "type": "int",
+    "description": "菜单分割线长度",
+    "hint": "控制分割线的长度，建议 20-40 之间",
+    "default": 28
+  },
+  "menu_max_reactions": {
+    "type": "int",
+    "description": "最大自动贴表情数量",
+    "hint": "当前平台可能只支持有限个 reaction，建议不超过 20",
+    "default": 20
+  },
   "face_pool": {
     "type": "list",
     "description": "可选的备用 face_id 池",
