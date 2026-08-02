@@ -34,7 +34,7 @@ class ReactMenuPlugin(Star):
         self.menu_divider_length = int(self._config_get("menu_divider_length", 28))
         self.menu_timeout = int(self._config_get("menu_timeout_seconds", 600))
         self.debounce_seconds = int(self._config_get("debounce_seconds", 3))
-        self.menu_max_reactions = int(self._config_get("menu_max_reactions", 8))
+        self.menu_max_reactions = int(self._config_get("menu_max_reactions", 0) or 0)
         self.menu_repeat_block = bool(self._config_get("menu_repeat_block", True))
         self.menu_repeat_reply = str(self._config_get("menu_repeat_reply", "当前菜单已经生效，正在冷却中，直接点表情或发序号/内容即可触发~"))
         self.face_pool = self._normalize_face_pool(self._config_get("face_pool", []))
@@ -316,7 +316,10 @@ class ReactMenuPlugin(Star):
             return False
 
         items = self._assign_face_ids(self.menu_items)
-        emoji_items = [item for item in items if item.get("face_id")][: self.menu_max_reactions]
+        if self.menu_max_reactions > 0:
+            emoji_items = [item for item in items if item.get("face_id")][: self.menu_max_reactions]
+        else:
+            emoji_items = [item for item in items if item.get("face_id")]
         emoji_map = {
             item["face_id"]: {"command": item["command"], "label": item["label"]}
             for item in emoji_items
@@ -438,8 +441,10 @@ class ReactMenuPlugin(Star):
 
         notice_type = str(raw.get("notice_type") or "").lower().strip()
         if notice_type not in ("group_msg_reaction", "group_msg_emoji_like"):
-            logger.debug(f"[react_menu] 非 reaction 通知类型: {notice_type}")
-            return
+            # 某些平台会把 reaction 事件塞在 message / post_type / sub_type 的组合中，这里做兼容。
+            if not (raw.get("post_type") == "notice" or raw.get("type") == "notice"):
+                logger.debug(f"[react_menu] 非 reaction 通知类型: notice_type={notice_type} raw={raw}")
+                return
 
         # group_msg_emoji_like 没有 sub_type 字段，仅 group_msg_reaction 需要校验
         sub_type = str(raw.get("sub_type") or "").lower().strip()
@@ -448,6 +453,8 @@ class ReactMenuPlugin(Star):
             return
 
         message_id = self._resolve_raw_field(raw, ("message_id", "msg_id", "message_id_str", "msgId", "messageId"))
+        if not message_id:
+            message_id = self._resolve_raw_field(raw.get("message", {}) if isinstance(raw.get("message"), dict) else {}, ("message_id", "msg_id", "message_id_str", "msgId", "messageId"))
         clicker_id = self._resolve_raw_field(
             raw,
             (
@@ -464,7 +471,7 @@ class ReactMenuPlugin(Star):
         )
         face_id = self._extract_face_id(raw)
 
-        logger.debug(f"[react_menu] reaction event parsed: message_id={message_id} clicker_id={clicker_id} face_id={face_id} raw={raw}")
+        logger.info(f"[react_menu] reaction event parsed: message_id={message_id} clicker_id={clicker_id} face_id={face_id} notice_type={notice_type} raw={raw}")
 
         if not message_id or not clicker_id or not face_id:
             logger.debug(
