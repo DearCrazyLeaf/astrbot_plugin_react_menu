@@ -8,7 +8,7 @@
 
 ---
 
-## ✅ 简介
+## ✅ 简介 | Introduction
 
 <table>
   <tr>
@@ -16,14 +16,17 @@
       <img width="170" alt="logo" src="logo.png" style="border-radius: 24px;" />
     </td>
     <td>
-      <strong>Steam Update Push</strong><br />
-      Steam News · Workshop · Free Games<br />
-      <sub>Clear updates, delivered to your AstrBot conversations.</sub>
+      <strong>AstrBot React Menu</strong><br />
+       Emoji Reaction · Interactive Menu · Command Trigger<br />
+      <sub>Turn emoji reactions into button-like commands in your AstrBot conversations.</sub>
     </td>
   </tr>
 </table>
 
-`astrbot_plugin_react_menu` 是一款 AstrBot 插件：群内发送 `菜单` 关键词后，插件会生成一条带 emoji 的互动菜单，群员点击 emoji 即可触发对应的插件指令，基于 aiocqhttp / NapCat `group_msg_reaction` 通知机制构建，支持从 `raw_message` 解析 reaction 事件
+这是一个为 **AstrBot** 编写的插件：群内发送配置的触发关键词后，插件会生成一条带 `emoji` 的互动菜单，群员点击这些 `emoji` 即可触发对应的插件指令，菜单内容可配置
+
+> [!TIP]
+> 基于 aiocqhttp / NapCat `group_msg_reaction` 通知机制构建，支持从 `raw_message` 解析 reaction 事件基于 aiocqhttp / NapCat `group_msg_reaction` 通知机制构建，支持从 `raw_message` 解析 reaction 事件
 
 > [!NOTE]
 > 本插件面向非 QQ 官方机器人，仿造官方机器人聊天按钮触发方式实现，通过 emoji reaction 交互实现按钮式命令调用
@@ -37,9 +40,9 @@
 
 ---
 
-## ✅ 功能
+## ✅ 功能 | Features
 
-<img width="596" height="1158" alt="image" src="https://github.com/user-attachments/assets/06758a41-a431-46c1-95e1-525169fc1a2a" />
+<img width="600" alt="预览效果图" src="https://github.com/user-attachments/assets/06758a41-a431-46c1-95e1-525169fc1a2a" />
 
 - 支持配置菜单内容，包括显示文本、触发指令和可选表情ID
 - 监听群聊中的 `菜单` 关键词
@@ -52,7 +55,7 @@
 
 ---
 
-## 📦 安装
+## 📦 安装 | Installation
 
 1. 将本插件目录放入 AstrBot 的 `data/plugins/` 下：
    ```bash
@@ -63,7 +66,7 @@
 
 ---
 
-## ⚙️ 配置
+## ⚙️ 配置 | Configuration
 
 本插件通过 `config.json` 配置核心行为。推荐通过 AstrBot WebUI 插件配置界面修改，或直接编辑 `config.json`
 
@@ -123,30 +126,15 @@
 
 ---
 
-## 🧪 使用
+## 🧪 使用 | Usage
 
-1. 群内发送 `菜单`
-2. 插件会发送菜单文本并自动贴上 emoji
-3. 点击菜单中的 emoji 即可触发对应指令
-
-### 推荐流程
-
-- 推荐在菜单中使用常用娱乐指令，如 `每日老婆`、`每日小猪`、`随机VTB`
-- 请确保目标插件已经启用，并且对应命令在当前 AstrBot 中可用
+1. 群内发送配置的触发关键词，例如： `菜单`
+2. 插件会发送菜单文本并自动贴上 `emoji`
+3. 点击菜单中的 `emoji` 即可触发对应指令
 
 ---
 
-## 🎯 常见验证
-
-- 发送 `菜单` 后能否得到菜单文本
-- 菜单是否成功贴上 emoji
-- 点击 emoji 是否触发对应功能
-- 取消点击后是否不会重复触发
-- 菜单过期后点击是否不再触发
-
----
-
-## ⚠️ 注意事项
+## ⚠️ 注意事项 | Cautions
 
 - 本插件仅支持群聊场景
 - `group_msg_reaction` 事件解析依赖 `raw_message`
@@ -156,7 +144,7 @@
 
 ---
 
-## ❤️ 贡献者 | contributors
+## ❤️ 贡献者 | Contributors
 
 <a href="https://github.com/DearCrazyLeaf/astrbot_plugin_react_menu/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=DearCrazyLeaf/astrbot_plugin_react_menu&max=300&columns=15" alt="Contributors" />
