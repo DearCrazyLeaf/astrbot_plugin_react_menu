@@ -10,17 +10,29 @@
 
 ## ✅ 简介
 
-`astrbot_plugin_react_menu` 是一款 AstrBot 插件：群内发送 `菜单` 关键词后，插件会生成一条带 emoji 的互动菜单，群员点击 emoji 即可触发对应的娱乐插件指令。
+<table>
+  <tr>
+    <td width="190" align="center">
+      <img width="170" alt="logo" src="logo.png" style="border-radius: 24px;" />
+    </td>
+    <td>
+      <strong>Steam Update Push</strong><br />
+      Steam News · Workshop · Free Games<br />
+      <sub>Clear updates, delivered to your AstrBot conversations.</sub>
+    </td>
+  </tr>
+</table>
+
+`astrbot_plugin_react_menu` 是一款 AstrBot 插件：群内发送 `菜单` 关键词后，插件会生成一条带 emoji 的互动菜单，群员点击 emoji 即可触发对应的插件指令，基于 aiocqhttp / NapCat `group_msg_reaction` 通知机制构建，支持从 `raw_message` 解析 reaction 事件
 
 > [!NOTE]
-> 本插件面向非 QQ 官方机器人，仿造官方机器人聊天按钮触发方式实现，通过 emoji reaction 交互实现按钮式命令调用。
-
-本插件基于 aiocqhttp / NapCat `group_msg_reaction` 通知机制构建，支持从 `raw_message` 解析 reaction 事件。
+> 本插件面向非 QQ 官方机器人，仿造官方机器人聊天按钮触发方式实现，通过 emoji reaction 交互实现按钮式命令调用
 
 [![Release](https://img.shields.io/github/v/release/DearCrazyLeaf/astrbot_plugin_react_menu?include_prereleases&color=blueviolet&label=最新版本)](https://github.com/DearCrazyLeaf/astrbot_plugin_react_menu/releases/latest)
 [![License](https://img.shields.io/badge/许可证-GPL%203.0-orange)](https://www.gnu.org/licenses/gpl-3.0.txt)
 [![Issues](https://img.shields.io/github/issues/DearCrazyLeaf/astrbot_plugin_react_menu?color=darkgreen&label=反馈)](https://github.com/DearCrazyLeaf/astrbot_plugin_react_menu/issues)
 [![Pull Requests](https://img.shields.io/github/issues-pr/DearCrazyLeaf/astrbot_plugin_react_menu?color=blue&label=请求)](https://github.com/DearCrazyLeaf/astrbot_plugin_react_menu/pulls)
+[![QQ Group](https://img.shields.io/badge/点击加入QQ群-12B7F5?logo=tencentqq&logoColor=white&label=问题反馈和建议)](https://qm.qq.com/q/H3uUCEZKgg)
 [![GitHub Stars](https://img.shields.io/github/stars/DearCrazyLeaf/astrbot_plugin_react_menu?color=yellow&label=标星)](https://github.com/DearCrazyLeaf/astrbot_plugin_react_menu/stargazers)
 
 ---
@@ -29,6 +41,7 @@
 
 <img width="596" height="1158" alt="image" src="https://github.com/user-attachments/assets/06758a41-a431-46c1-95e1-525169fc1a2a" />
 
+- 支持配置菜单内容，包括显示文本、触发指令和可选表情ID
 - 监听群聊中的 `菜单` 关键词
 - 发送带 emoji 的互动菜单文本
 - 解析 `group_msg_reaction` 事件的 `raw_message`
@@ -46,13 +59,13 @@
    AstrBot/data/plugins/astrbot_plugin_react_menu
    ```
 2. 启动或重启 AstrBot。
-3. 在插件管理界面启用 `表情回应菜单`。
+3. 在插件管理界面启用 `表情回应菜单`
 
 ---
 
 ## ⚙️ 配置
 
-本插件通过 `config.json` 配置核心行为。推荐通过 AstrBot WebUI 插件配置界面修改，或直接编辑 `config.json`。
+本插件通过 `config.json` 配置核心行为。推荐通过 AstrBot WebUI 插件配置界面修改，或直接编辑 `config.json`
 
 ### 配置项说明
 
@@ -100,13 +113,13 @@
 - `menu_items` 支持两种写法：
   - 字符串形式：`"显示内容"` 或 `"显示内容 触发指令"`
   - 对象形式：`{ "label": "显示内容", "command": "触发指令", "face_id": "可选表情ID" }`
-- 只有字符串时，默认 `label` 和 `command` 相同；例如 `"每日老婆"` 将显示为“每日老婆”，触发命令同样为 `每日老婆`。
-- 使用 `"显示内容 触发指令"` 时，前半部分作为菜单文本，后半部分作为实际命令；例如 `"每日小猪 今日小猪"` 会显示“每日小猪”，触发 `/今日小猪`。
-- 如果未指定 `face_id`，插件会从 `face_pool` 中随机分配一个可用 ID。
-- `menu_max_reactions` 控制自动贴表情数量；如果菜单项更多，超出部分仍可通过序号或文本内容触发。
-- `menu_header_image_url` 支持配置菜单头图链接；当配置后菜单将显示头图。
-- `menu_divider_char` 与 `menu_divider_length` 用于控制菜单顶部/底部分割线样式。
-- 文本命令会自动补 `/` 前缀，因此 `每日老婆` 与 `/每日老婆` 效果一致。
+- 只有字符串时，默认 `label` 和 `command` 相同；例如 `"每日老婆"` 将显示为“每日老婆”，触发命令同样为 `每日老婆`
+- 使用 `"显示内容 触发指令"` 时，前半部分作为菜单文本，后半部分作为实际命令；例如 `"每日小猪 今日小猪"` 会显示“每日小猪”，触发 `/今日小猪`
+- 如果未指定 `face_id`，插件会从 `face_pool` 中随机分配一个可用 ID
+- `menu_max_reactions` 控制自动贴表情数量；如果菜单项更多，超出部分仍可通过序号或文本内容触发
+- `menu_header_image_url` 支持配置菜单头图链接；当配置后菜单将显示头图
+- `menu_divider_char` 与 `menu_divider_length` 用于控制菜单顶部/底部分割线样式
+- 文本命令会自动补 `/` 前缀，因此 `每日老婆` 与 `/每日老婆` 效果一致
 
 ---
 
@@ -143,9 +156,16 @@
 
 ---
 
-## 📄 许可证
+## ❤️ 贡献者 | contributors
 
-本项目采用 **GNU GPL v3.0** 许可证。
+<a href="https://github.com/DearCrazyLeaf/astrbot_plugin_react_menu/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=DearCrazyLeaf/astrbot_plugin_react_menu&max=300&columns=15" alt="Contributors" />
+</a>
+
+
+## 📜 许可证 | License
+
+[![GPL-3.0 License](https://img.shields.io/badge/License-GPL--3.0-orange?style=for-the-badge)](https://www.gnu.org/licenses/gpl-3.0.txt)
 
 ---
 
