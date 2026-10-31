@@ -4,7 +4,7 @@
 ![AstrBot](https://img.shields.io/badge/AstrBot-v4.12%2B-brightgreen)
 ![License](https://img.shields.io/badge/License-GPL--3.0-orange)
 
-![views](https://count.getloli.com/get/@astrbotchuanhuatong?theme=booru-jaypee)
+![views](https://count.getloli.com/get/@astrbot_plugin_react_menu?theme=booru-jaypee)
 
 ---
 
@@ -47,6 +47,7 @@
 - 支持配置菜单内容，包括显示文本、触发指令和可选表情ID
 - 监听群聊中的 `菜单` 关键词
 - 发送带 emoji 的互动菜单文本
+- 自动分配互不相同的 QQ 表情，避免重复表情导致的菜单项无法点击触发
 - 解析 `group_msg_reaction` 事件的 `raw_message`
 - 校验 `message_id` 仅处理本插件发送的菜单消息
 - 支持点击防抖与菜单过期
@@ -80,13 +81,8 @@
 | `debounce_seconds` | int | `3` | 同一用户对同一 emoji 的冷却时间，单位秒 |
 | `menu_repeat_block` | bool | `true` | 是否启用菜单冷却阻断 |
 | `menu_repeat_reply` | string | `"当前菜单已经生效，正在冷却中，直接点表情或发序号/内容即可触发~"` | 菜单冷却时的提示文本 |
-| `face_pool` | array | `[
-"128",
-"129",
-"151",
-"144"
-]` | 未指定 face_id 时的备用随机 face_id 池 |
-| `menu_max_reactions` | int | `8` | 自动贴表情的最大数量，超过部分仍可通过序号/文本触发 |
+| `face_pool` | array | `["5", "9", "10", "14", "18", "21", "23", "25", "27", "29", "32", "49", "53", "55", "59", "60", "63", "66", "74", "79", "89", "96", "99", "100", "105", "120", "123", "124", "129", "144", "147", "171", "175", "179", "182", "183", "201"]` | 未指定 face_id 时的备用随机 face_id 池。仅包含当前 QQ 有效且互不相同的表情 ID，已弃用/重复的 ID（如旧表库中的 128、151）会被自动过滤，避免贴出重复表情 |
+| `menu_max_reactions` | int | `20` | 自动贴表情的最大数量，超过部分仍可通过序号/文本触发 |
 | `menu_header_image_url` | string | `""` | 菜单头图 URL，支持可配置图床链接 |
 | `menu_divider_char` | string | `"─"` | 菜单分割线字符，用于美化菜单样式 |
 | `menu_divider_length` | int | `28` | 菜单分割线长度 |
@@ -102,7 +98,7 @@
   "debounce_seconds": 3,
   "menu_repeat_block": true,
   "menu_repeat_reply": "当前菜单已经生效，正在冷却中，直接点表情或发序号/内容即可触发~",
-  "face_pool": ["128", "129", "151", "144"],
+  "face_pool": ["5", "9", "10", "14", "18", "21", "23", "25", "27", "29", "32", "49", "53", "55", "59", "60", "63", "66", "74", "79", "89", "96", "99", "100", "105", "120", "123", "124", "129", "144", "147", "171", "175", "179", "182", "183", "201"],
   "menu_items": [
     "每日老婆,抽老婆",
     "今日小猪",
@@ -119,6 +115,7 @@
 - 只有字符串时，默认 `label` 和 `command` 相同；例如 `"每日老婆"` 将显示为“每日老婆”，触发命令同样为 `每日老婆`
 - 使用 `"显示内容 触发指令"` 时，前半部分作为菜单文本，后半部分作为实际命令；例如 `"每日小猪 今日小猪"` 会显示“每日小猪”，触发 `/今日小猪`
 - 如果未指定 `face_id`，插件会从 `face_pool` 中随机分配一个可用 ID
+- 分配时会自动过滤已弃用/重复的 QQ 表情 ID，并按表情本身去重，保证一个菜单内贴出的表情互不相同
 - `menu_max_reactions` 控制自动贴表情数量；如果菜单项更多，超出部分仍可通过序号或文本内容触发
 - `menu_header_image_url` 支持配置菜单头图链接；当配置后菜单将显示头图
 - `menu_divider_char` 与 `menu_divider_length` 用于控制菜单顶部/底部分割线样式
@@ -140,7 +137,8 @@
 - `group_msg_reaction` 事件解析依赖 `raw_message`
 - `event.message_str` 对 reaction 事件通常为空，因此必须从 `raw_message` 解析
 - `operation=1` 表示添加表情，`operation=2` 表示取消表情，默认忽略取消事件
-- `target_id` 通常为点击者，请根据实际 raw_message 输出确认字段含义
+- `target_id` 通常为点击者，请根据实际 `raw_message` 输出确认字段含义
+- 贴表情时会自动过滤已弃用/重复的 QQ 表情 ID，并按表情本身去重，保证同一个菜单内的表情不重复，从而避免因重复表情导致的菜单项无法点击触发
 
 ---
 
