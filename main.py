@@ -421,6 +421,13 @@ class ReactMenuPlugin(Star):
         self.menu_header_image_url = str(self._config_get("menu_header_image_url", "") or "").strip()
         self.menu_divider_char = str(self._config_get("menu_divider_char", "─"))[:1] or "─"
         self.menu_divider_length = int(self._config_get("menu_divider_length", 28))
+        self.menu_footer_text = str(
+            self._config_get(
+                "menu_footer_text",
+                "👆 下方按顺序贴表情，第1个表情对应第1项，第2个表情对应第2项。也可直接回复序号或菜单内容触发。",
+            )
+            or ""
+        )
         self.menu_timeout = int(self._config_get("menu_timeout_seconds", 600))
         self.debounce_seconds = int(self._config_get("debounce_seconds", 3))
         self.menu_max_reactions = int(self._config_get("menu_max_reactions", 0) or 0)
@@ -705,7 +712,8 @@ class ReactMenuPlugin(Star):
         for index, item in enumerate(items, start=1):
             lines.append(f"  {index}. {item['label']}")
         lines.append(self.menu_divider_char * self.menu_divider_length)
-        lines.append("👆 下方按顺序贴表情，第1个表情对应第1项，第2个表情对应第2项。也可直接回复序号或菜单内容触发。")
+        if self.menu_footer_text:
+            lines.append(self.menu_footer_text)
         return "\n".join(lines)
 
     def _get_bot(self, event: AstrMessageEvent) -> Any:

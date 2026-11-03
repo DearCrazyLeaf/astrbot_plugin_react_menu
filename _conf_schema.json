@@ -56,6 +56,12 @@
     "hint": "控制分割线的长度，建议 20-40 之间",
     "default": 28
   },
+  "menu_footer_text": {
+    "type": "string",
+    "description": "菜单底部说明",
+    "hint": "显示在菜单最下方的说明文字；留空则不显示",
+    "default": "👆 下方按顺序贴表情，第1个表情对应第1项，第2个表情对应第2项。也可直接回复序号或菜单内容触发。"
+  },
   "menu_max_reactions": {
     "type": "int",
     "description": "最大自动贴表情数量",

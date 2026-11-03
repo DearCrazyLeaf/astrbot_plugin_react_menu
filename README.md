@@ -86,6 +86,7 @@
 | `menu_header_image_url` | string | `""` | 菜单头图 URL，支持可配置图床链接 |
 | `menu_divider_char` | string | `"─"` | 菜单分割线字符，用于美化菜单样式 |
 | `menu_divider_length` | int | `28` | 菜单分割线长度 |
+| `menu_footer_text` | string | `"👆 下方按顺序贴表情，第1个表情对应第1项，第2个表情对应第2项。也可直接回复序号或菜单内容触发。"` | 菜单最下方的说明文案；留空则隐藏 |
 | `menu_items` | array | `见示例` | 按顺序定义菜单项，支持字符串或对象形式 |
 
 ### 示例配置
