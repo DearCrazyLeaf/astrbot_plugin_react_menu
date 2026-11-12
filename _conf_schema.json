@@ -1,93 +1,455 @@
 {
+  "global_settings": {
+    "type": "object",
+    "description": "全局菜单设置",
+    "hint": "全局菜单与 UMO 菜单平级配置；UMO 菜单列表为空时使用全局菜单，非空时忽略全局菜单，仅已登记 UMO 生效",
+    "items": {
+      "menus": {
+        "type": "template_list",
+        "description": "全局菜单",
+        "default": [
+          {
+            "__template_key": "menu",
+            "menu_id": "entertainment",
+            "name": "娱乐菜单",
+            "keywords": [
+              "菜单"
+            ],
+            "title": "🎮 菜单",
+            "items": [
+              {
+                "label": "每日老婆",
+                "command": "抽老婆",
+                "face_id": ""
+              },
+              {
+                "label": "今日小猪",
+                "command": "今日小猪",
+                "face_id": ""
+              },
+              {
+                "label": "随机VTB",
+                "command": "dd",
+                "face_id": ""
+              }
+            ]
+          }
+        ],
+        "templates": {
+          "menu": {
+            "name": "全局菜单",
+            "display_item": "name",
+            "items": {
+              "menu_id": {
+                "type": "string",
+                "default": "",
+                "invisible": true
+              },
+              "name": {
+                "type": "string",
+                "description": "菜单名称",
+                "default": "新菜单",
+                "hint": "仅用于识别这张配置卡片"
+              },
+              "keywords": {
+                "type": "list",
+                "description": "触发关键词",
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "hint": "群内发送其中任一关键词即可打开此菜单"
+              },
+              "title": {
+                "type": "string",
+                "description": "菜单标题",
+                "default": "🎮 新菜单"
+              },
+              "items": {
+                "type": "list",
+                "description": "菜单项目",
+                "default": [],
+                "items": {
+                  "label": {
+                    "type": "string",
+                    "default": ""
+                  },
+                  "command": {
+                    "type": "string",
+                    "default": ""
+                  },
+                  "face_id": {
+                    "type": "string",
+                    "default": ""
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "umo_menus": {
+        "type": "template_list",
+        "description": "UMO 菜单",
+        "default": [],
+        "templates": {
+          "menu": {
+            "name": "UMO 菜单",
+            "display_item": "name",
+            "items": {
+              "umo": {
+                "type": "string",
+                "description": "完整 UMO",
+                "default": "",
+                "hint": "填写 /sid 返回的完整群聊 UMO；同一 UMO 可重复填写以配置多个菜单"
+              },
+              "menu_id": {
+                "type": "string",
+                "default": "",
+                "invisible": true
+              },
+              "name": {
+                "type": "string",
+                "description": "菜单名称",
+                "default": "新菜单",
+                "hint": "仅用于识别这张配置卡片"
+              },
+              "keywords": {
+                "type": "list",
+                "description": "触发关键词",
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "hint": "群内发送其中任一关键词即可打开此菜单"
+              },
+              "title": {
+                "type": "string",
+                "description": "菜单标题",
+                "default": "🎮 新菜单"
+              },
+              "items": {
+                "type": "list",
+                "description": "菜单项目",
+                "default": [],
+                "items": {
+                  "label": {
+                    "type": "string",
+                    "default": ""
+                  },
+                  "command": {
+                    "type": "string",
+                    "default": ""
+                  },
+                  "face_id": {
+                    "type": "string",
+                    "default": ""
+                  }
+                }
+              }
+            }
+          }
+        },
+        "hint": "每张卡片定义一个会话菜单；同一 UMO 可添加多张菜单卡片。列表非空时，未登记会话不响应菜单"
+      }
+    }
+  },
+  "interaction_settings": {
+    "type": "object",
+    "description": "交互与有效期",
+    "hint": "菜单有效期、重复打开限制及点击防抖，适用于全局与 UMO 菜单",
+    "items": {
+      "menu_timeout_seconds": {
+        "type": "int",
+        "description": "菜单有效期（秒）",
+        "hint": "超过该时间后，表情点击和文字选择均不再触发此菜单",
+        "default": 60
+      },
+      "debounce_seconds": {
+        "type": "int",
+        "description": "点击防抖间隔（秒）",
+        "hint": "同一个用户对同一个 emoji 的重复点击冷却时间",
+        "default": 3
+      },
+      "menu_repeat_block": {
+        "type": "bool",
+        "description": "是否启用菜单冷却阻断",
+        "hint": "同一会话中同一菜单未过期时，重复打开只回复提示；不同菜单可分别打开",
+        "default": true
+      },
+      "menu_repeat_reply": {
+        "type": "string",
+        "description": "菜单冷却时的回复提示",
+        "hint": "当菜单被冷却阻断时，机器人会回复该文本",
+        "default": "当前菜单已经生效，正在冷却中，直接点表情或发序号/内容即可触发~"
+      }
+    }
+  },
+  "appearance_settings": {
+    "type": "object",
+    "description": "菜单外观",
+    "hint": "所有菜单共用的头图、分割线及底部说明",
+    "items": {
+      "menu_header_image_url": {
+        "type": "string",
+        "description": "菜单头图 URL",
+        "hint": "支持可访问的图床链接，可为空不显示头图",
+        "default": ""
+      },
+      "menu_divider_char": {
+        "type": "string",
+        "description": "菜单分割线字符",
+        "hint": "用于菜单文本中的分割线，例如 '─' 或 '-'",
+        "default": "─"
+      },
+      "menu_divider_length": {
+        "type": "int",
+        "description": "菜单分割线长度",
+        "hint": "控制分割线的长度，建议 20-40 之间",
+        "default": 28
+      },
+      "menu_footer_text": {
+        "type": "string",
+        "description": "菜单底部说明",
+        "hint": "显示在菜单最下方的说明文字；留空则不显示",
+        "default": "👆 下方按顺序贴表情，第1个表情对应第1项，第2个表情对应第2项。也可直接回复序号或菜单内容触发。"
+      }
+    }
+  },
+  "reaction_settings": {
+    "type": "object",
+    "description": "表情设置",
+    "hint": "自动贴表情的数量限制与备用表情池，适用于所有菜单",
+    "items": {
+      "menu_max_reactions": {
+        "type": "int",
+        "description": "最大自动贴表情数量",
+        "hint": "当前平台可能只支持有限个 reaction，建议不超过 20",
+        "default": 20
+      },
+      "face_pool": {
+        "type": "list",
+        "description": "可选的备用 face_id 池",
+        "hint": "当菜单项中未指定 face_id 时，插件将从此池中随机分配 face_id",
+        "default": [
+          "5",
+          "9",
+          "10",
+          "14",
+          "18",
+          "21",
+          "23",
+          "25",
+          "27",
+          "29",
+          "32",
+          "49",
+          "53",
+          "55",
+          "59",
+          "60",
+          "63",
+          "66",
+          "74",
+          "79",
+          "89",
+          "96",
+          "99",
+          "100",
+          "105",
+          "120",
+          "123",
+          "124",
+          "129",
+          "144",
+          "147",
+          "171",
+          "175",
+          "179",
+          "182",
+          "183",
+          "201"
+        ],
+        "items": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "session_settings": {
+    "type": "object",
+    "description": "旧版会话菜单（迁移兼容）",
+    "invisible": true,
+    "items": {
+      "sessions": {
+        "type": "list",
+        "default": []
+      }
+    }
+  },
   "menu_keywords": {
     "type": "list",
-    "description": "菜单触发关键词列表",
-    "hint": "支持多个关键字，例如 [\"菜单\"]",
-    "default": ["菜单"],
+    "description": "旧版菜单触发词（兼容）",
+    "invisible": true,
+    "default": [],
     "items": {
       "type": "string"
     }
   },
   "menu_title": {
     "type": "string",
-    "description": "菜单标题文本",
-    "hint": "显示在菜单最上方的标题，例如 🎮 菜单",
-    "default": "🎮 菜单"
+    "description": "旧版菜单标题（兼容）",
+    "invisible": true,
+    "default": ""
+  },
+  "menus": {
+    "type": "template_list",
+    "description": "旧版顶层菜单（迁移兼容）",
+    "invisible": true,
+    "default": [],
+    "templates": {
+      "menu": {
+        "name": "互动菜单",
+        "display_item": "name",
+        "items": {
+          "menu_id": {
+            "type": "string",
+            "default": "",
+            "invisible": true
+          },
+          "name": {
+            "type": "string",
+            "default": "新菜单"
+          },
+          "keywords": {
+            "type": "list",
+            "default": [],
+            "items": {
+              "type": "string"
+            }
+          },
+          "title": {
+            "type": "string",
+            "default": "🎮 新菜单"
+          },
+          "items": {
+            "type": "list",
+            "default": [],
+            "items": {
+              "label": {
+                "type": "string",
+                "default": ""
+              },
+              "command": {
+                "type": "string",
+                "default": ""
+              },
+              "face_id": {
+                "type": "string",
+                "default": ""
+              }
+            }
+          }
+        }
+      }
+    }
   },
   "menu_timeout_seconds": {
     "type": "int",
-    "description": "菜单有效期（秒）",
+    "description": "菜单有效期（秒）（旧版迁移兼容）",
     "hint": "超过该时间后，点击 emoji 将不再触发功能",
-    "default": 60
+    "default": null,
+    "invisible": true
   },
   "debounce_seconds": {
     "type": "int",
-    "description": "点击防抖间隔（秒）",
+    "description": "点击防抖间隔（秒）（旧版迁移兼容）",
     "hint": "同一个用户对同一个 emoji 的重复点击冷却时间",
-    "default": 3
+    "default": null,
+    "invisible": true
   },
   "menu_repeat_block": {
     "type": "bool",
-    "description": "是否启用菜单冷却阻断",
+    "description": "是否启用菜单冷却阻断（旧版迁移兼容）",
     "hint": "当群内已有未过期菜单时，再次发送菜单关键词将回复冷却提示，而不重新发送菜单",
-    "default": true
+    "default": null,
+    "invisible": true
   },
   "menu_repeat_reply": {
     "type": "string",
-    "description": "菜单冷却时的回复提示",
+    "description": "菜单冷却时的回复提示（旧版迁移兼容）",
     "hint": "当菜单被冷却阻断时，机器人会回复该文本",
-    "default": "当前菜单已经生效，正在冷却中，直接点表情或发序号/内容即可触发~"
+    "default": null,
+    "invisible": true
   },
   "menu_header_image_url": {
     "type": "string",
-    "description": "菜单头图 URL",
+    "description": "菜单头图 URL（旧版迁移兼容）",
     "hint": "支持可访问的图床链接，可为空不显示头图",
-    "default": ""
+    "default": null,
+    "invisible": true
   },
   "menu_divider_char": {
     "type": "string",
-    "description": "菜单分割线字符",
+    "description": "菜单分割线字符（旧版迁移兼容）",
     "hint": "用于菜单文本中的分割线，例如 '─' 或 '-'",
-    "default": "─"
+    "default": null,
+    "invisible": true
   },
   "menu_divider_length": {
     "type": "int",
-    "description": "菜单分割线长度",
+    "description": "菜单分割线长度（旧版迁移兼容）",
     "hint": "控制分割线的长度，建议 20-40 之间",
-    "default": 28
+    "default": null,
+    "invisible": true
   },
   "menu_footer_text": {
     "type": "string",
-    "description": "菜单底部说明",
+    "description": "菜单底部说明（旧版迁移兼容）",
     "hint": "显示在菜单最下方的说明文字；留空则不显示",
-    "default": "👆 下方按顺序贴表情，第1个表情对应第1项，第2个表情对应第2项。也可直接回复序号或菜单内容触发。"
+    "default": null,
+    "invisible": true
   },
   "menu_max_reactions": {
     "type": "int",
-    "description": "最大自动贴表情数量",
+    "description": "最大自动贴表情数量（旧版迁移兼容）",
     "hint": "当前平台可能只支持有限个 reaction，建议不超过 20",
-    "default": 20
+    "default": null,
+    "invisible": true
   },
   "face_pool": {
     "type": "list",
-    "description": "可选的备用 face_id 池",
-    "hint": "当 menu_items 中未指定 face_id 时，插件将从此池中随机分配 face_id",
-    "default": ["5", "9", "10", "14", "18", "21", "23", "25", "27", "29", "32", "49", "53", "55", "59", "60", "63", "66", "74", "79", "89", "96", "99", "100", "105", "120", "123", "124", "129", "144", "147", "171", "175", "179", "182", "183", "201"],
-    "items": { "type": "string" }
+    "description": "可选的备用 face_id 池（旧版迁移兼容）",
+    "hint": "当菜单项中未指定 face_id 时，插件将从此池中随机分配 face_id",
+    "default": null,
+    "items": {
+      "type": "string"
+    },
+    "invisible": true
   },
   "menu_items": {
     "type": "list",
-    "description": "按顺序定义的菜单项列表",
-    "hint": "支持字符串形式（例如 '今日小猪'）或对象形式 { label, command, face_id }，command指令会自动补齐前置'/'",
-    "default": [
-      "每日老婆,抽老婆",
-      "今日小猪",
-      "随机VTB,dd"
-    ],
+    "description": "旧版单菜单项目（兼容）",
+    "invisible": true,
+    "default": [],
     "items": {
-      "label": { "type": "string", "default": "" },
-      "command": { "type": "string", "default": "" },
-      "face_id": { "type": "string", "default": "" }
+      "label": {
+        "type": "string",
+        "default": ""
+      },
+      "command": {
+        "type": "string",
+        "default": ""
+      },
+      "face_id": {
+        "type": "string",
+        "default": ""
+      }
     }
+  },
+  "_settings_grouped": {
+    "type": "bool",
+    "default": false,
+    "invisible": true
   }
 }

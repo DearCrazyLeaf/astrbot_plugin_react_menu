@@ -13,6 +13,23 @@ from astrbot.api.star import Context, Star, StarTools
 from astrbot.core.message.message_event_result import MessageChain
 
 PLUGIN_ID = "astrbot_plugin_react_menu"
+_OPTION_GROUPS = {
+    "interaction_settings": ("menu_timeout_seconds", "debounce_seconds", "menu_repeat_block", "menu_repeat_reply"),
+    "appearance_settings": ("menu_header_image_url", "menu_divider_char", "menu_divider_length", "menu_footer_text"),
+    "reaction_settings": ("menu_max_reactions", "face_pool"),
+}
+_DEFAULT_MENU_CONFIG = [{
+    "__template_key": "menu",
+    "menu_id": "entertainment",
+    "name": "娱乐菜单",
+    "keywords": ["菜单"],
+    "title": "🎮 菜单",
+    "items": [
+        {"label": "每日老婆", "command": "抽老婆", "face_id": ""},
+        {"label": "今日小猪", "command": "今日小猪", "face_id": ""},
+        {"label": "随机VTB", "command": "dd", "face_id": ""},
+    ],
+}]
 
 try:
     from astrbot.api.platform import AstrBotMessage, MessageMember
@@ -415,30 +432,28 @@ class ReactMenuPlugin(Star):
         super().__init__(context)
         self.context = context
         self.config = config
+        self._migrate_option_groups()
 
-        self.menu_keywords = self._config_get("menu_keywords", ["菜单"])
-        self.menu_title = str(self._config_get("menu_title", "🎮 娱乐菜单"))
-        self.menu_header_image_url = str(self._config_get("menu_header_image_url", "") or "").strip()
-        self.menu_divider_char = str(self._config_get("menu_divider_char", "─"))[:1] or "─"
-        self.menu_divider_length = int(self._config_get("menu_divider_length", 28))
+        self.menu_header_image_url = str(self._option_get("menu_header_image_url", "") or "").strip()
+        self.menu_divider_char = str(self._option_get("menu_divider_char", "─"))[:1] or "─"
+        self.menu_divider_length = int(self._option_get("menu_divider_length", 28))
         self.menu_footer_text = str(
-            self._config_get(
+            self._option_get(
                 "menu_footer_text",
                 "👆 下方按顺序贴表情，第1个表情对应第1项，第2个表情对应第2项。也可直接回复序号或菜单内容触发。",
             )
             or ""
         )
-        self.menu_timeout = int(self._config_get("menu_timeout_seconds", 600))
-        self.debounce_seconds = int(self._config_get("debounce_seconds", 3))
-        self.menu_max_reactions = int(self._config_get("menu_max_reactions", 0) or 0)
-        self.menu_repeat_block = bool(self._config_get("menu_repeat_block", True))
-        self.menu_repeat_reply = str(self._config_get("menu_repeat_reply", "当前菜单已经生效，正在冷却中，直接点表情或发序号/内容即可触发~"))
-        self.face_pool = self._normalize_face_pool(self._config_get("face_pool", []))
-        self.menu_items = self._normalize_menu_items(self._config_get("menu_items", None))
-
-        self._active_menus: dict[str, dict[str, Any]] = {}
-        self._recent_virtual_commands: dict[tuple[str, str, str], float] = {}
-        self._debounce: dict[tuple[str, str, str], float] = {}
+        self.menu_timeout = int(self._option_get("menu_timeout_seconds", 60))
+        self.debounce_seconds = int(self._option_get("debounce_seconds", 3))
+        self.menu_max_reactions = int(self._option_get("menu_max_reactions", 20) or 0)
+        self.menu_repeat_block = bool(self._option_get("menu_repeat_block", True))
+        self.menu_repeat_reply = str(self._option_get("menu_repeat_reply", "当前菜单已经生效，正在冷却中，直接点表情或发序号/内容即可触发~"))
+        self.face_pool = self._normalize_face_pool(self._option_get("face_pool", []))
+        self._load_menu_profiles()
+        self._active_menus: dict[tuple[str, str], dict[str, Any]] = {}
+        self._recent_virtual_commands: dict[tuple[str, str, str, str], float] = {}
+        self._debounce: dict[tuple[str, str, str, str], float] = {}
         self._cleanup_task = asyncio.create_task(self._cleanup_loop())
 
         try:
@@ -447,8 +462,196 @@ class ReactMenuPlugin(Star):
             self._data_dir = None
 
         logger.info(
-            f"[react_menu] 已加载，菜单关键词={self.menu_keywords}，菜单项数量={len(self.menu_items)} face_pool={len(self.face_pool)}"
+            f"[react_menu] 已加载，全局菜单={len(self.global_menus)} 会话配置={len(self.session_menus)} face_pool={len(self.face_pool)}"
         )
+
+    def _migrate_option_groups(self) -> None:
+        if self._config_get("_settings_grouped", False):
+            return
+        for group, keys in _OPTION_GROUPS.items():
+            values = self._config_get(group, {})
+            values = dict(values) if isinstance(values, dict) else {}
+            for key in keys:
+                legacy = self._config_get(key, None)
+                if legacy is not None:
+                    values[key] = legacy
+                self.config[key] = None
+            self.config[group] = values
+        self.config["_settings_grouped"] = True
+        if hasattr(self.config, "save_config"):
+            try:
+                self.config.save_config()
+            except Exception as exc:
+                logger.error(f"[react_menu] 设置分组迁移保存失败: {exc}")
+
+    def _option_get(self, key: str, default: Any) -> Any:
+        for group, keys in _OPTION_GROUPS.items():
+            if key in keys:
+                values = self._config_get(group, {})
+                return values.get(key, default) if isinstance(values, dict) else default
+        return default
+
+    def _load_menu_profiles(self) -> None:
+        settings = self._config_get("global_settings", {})
+        settings = dict(settings) if isinstance(settings, dict) else {}
+        changed = False
+        defaults = self._normalize_menus(_DEFAULT_MENU_CONFIG)
+        previous = self._normalize_menus(self._config_get("menus", []))
+        legacy = self._legacy_menu()
+        if not previous or (legacy and self._menu_signature(previous) == self._menu_signature(defaults)):
+            previous = legacy
+        if previous:
+            current = self._normalize_menus(settings.get("menus", []))
+            if "menus" not in settings or self._menu_signature(current) == self._menu_signature(defaults):
+                settings["menus"] = [{"__template_key": "menu", **menu} for menu in previous]
+            # Consume old fields once so clearing new cards never revives old menus.
+            self.config["menus"] = []
+            self.config["menu_items"] = []
+            self.config["menu_keywords"] = []
+            self.config["menu_title"] = ""
+            changed = True
+
+        old_settings = self._config_get("session_settings", {})
+        old_sessions = old_settings.get("sessions", []) if isinstance(old_settings, dict) else []
+        if isinstance(old_sessions, list) and old_sessions:
+            if not settings.get("umo_menus"):
+                flattened = []
+                seen = set()
+                for entry in old_sessions:
+                    if not isinstance(entry, dict):
+                        continue
+                    umo = self._normalize_umo(entry.get("umo"))
+                    if umo in seen:
+                        continue
+                    if umo:
+                        seen.add(umo)
+                    menus = entry.get("menus", [])
+                    menus = [menu for menu in menus if isinstance(menu, dict)] if isinstance(menus, list) else []
+                    # Empty old sessions remain registered with no usable menu.
+                    for menu in menus or [{}]:
+                        flattened.append({**menu, "__template_key": "menu", "umo": entry.get("umo", "")})
+                settings["umo_menus"] = flattened
+            self.config["session_settings"] = {"sessions": []}
+            changed = True
+
+        if changed:
+            self.config["global_settings"] = settings
+            if hasattr(self.config, "save_config"):
+                try:
+                    self.config.save_config()
+                except Exception as exc:
+                    logger.error(f"[react_menu] 菜单迁移配置保存失败: {exc}")
+
+        self.global_menus = self._normalize_menus(settings.get("menus", []))
+        raw_entries = settings.get("umo_menus", [])
+        # A nonempty list always enables strict UMO mode, even if a card is invalid.
+        self._umo_mode = bool(raw_entries)
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        if isinstance(raw_entries, list):
+            for entry in raw_entries:
+                umo = self._normalize_umo(entry.get("umo")) if isinstance(entry, dict) else ""
+                if not umo:
+                    logger.warning("[react_menu] UMO 菜单的会话标识无效，已忽略；全局菜单仍被停用")
+                    continue
+                grouped.setdefault(umo, []).append(entry)
+        self.session_menus = {umo: self._normalize_menus(entries) for umo, entries in grouped.items()}
+
+    def _legacy_menu(self) -> list[dict[str, Any]]:
+        items = self._normalize_menu_items(self._config_get("menu_items", None))
+        keywords = self._config_get("menu_keywords", ["菜单"])
+        if isinstance(keywords, str):
+            keywords = [keywords]
+        if not isinstance(keywords, list):
+            keywords = []
+        keywords = [str(value).strip() for value in keywords if str(value).strip()]
+        if not items:
+            return []
+        return [{
+            "menu_id": "legacy",
+            "name": "娱乐菜单",
+            "keywords": keywords or ["菜单"],
+            "title": str(self._config_get("menu_title", "🎮 菜单")),
+            "items": items,
+        }]
+
+    def _normalize_menus(self, raw: Any) -> list[dict[str, Any]]:
+        if not isinstance(raw, list):
+            return []
+        menus: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        seen_keywords: set[str] = set()
+        for index, value in enumerate(raw, start=1):
+            if not isinstance(value, dict):
+                continue
+            keywords = value.get("keywords", [])
+            if isinstance(keywords, str):
+                keywords = [keywords]
+            if not isinstance(keywords, list):
+                continue
+            clean_keywords: list[str] = []
+            menu_keywords: set[str] = set()
+            for raw_keyword in keywords:
+                keyword = str(raw_keyword).strip().lstrip("/").strip()
+                normalized = keyword.casefold()
+                if keyword and normalized not in menu_keywords:
+                    clean_keywords.append(keyword)
+                    menu_keywords.add(normalized)
+            clean_keywords = [
+                keyword for keyword in clean_keywords
+                if keyword.casefold() not in seen_keywords
+            ]
+            items = self._normalize_menu_items(value.get("items", []))
+            if not clean_keywords or not items:
+                continue
+            menu_id = str(value.get("menu_id") or clean_keywords[0].casefold()).strip()
+            if menu_id in seen_ids:
+                menu_id = f"{menu_id}:{index}"
+            seen_ids.add(menu_id)
+            seen_keywords.update(keyword.casefold() for keyword in clean_keywords)
+            menus.append({
+                "menu_id": menu_id,
+                "name": str(value.get("name") or f"菜单 {index}").strip(),
+                "keywords": clean_keywords,
+                "title": str(value.get("title") or value.get("name") or "互动菜单"),
+                "items": items,
+            })
+        return menus
+
+    @staticmethod
+    def _normalize_umo(raw: Any) -> str:
+        value = str(raw or "").strip()
+        parts = value.split(":", 2)
+        if len(parts) != 3 or not all(part.strip() for part in parts):
+            return ""
+        return f"{parts[0].strip()}:{parts[1].strip()}:{parts[2].strip()}"
+
+    def _menus_for_session(self, session_id: str) -> list[dict[str, Any]] | None:
+        if not self._umo_mode:
+            return self.global_menus
+        return self.session_menus.get(session_id)
+
+    def _menu_for_session_keyword(
+        self, session_id: str, keyword: str
+    ) -> dict[str, Any] | None:
+        menus = self._menus_for_session(session_id)
+        if not menus:
+            return None
+        normalized = (keyword or "").strip().lstrip("/").casefold()
+        return next(
+            (menu for menu in menus if normalized in {value.casefold() for value in menu["keywords"]}),
+            None,
+        )
+
+    @staticmethod
+    def _menu_signature(menus: list[dict[str, Any]]) -> list[tuple[Any, ...]]:
+        return [
+            (
+                tuple(keyword.casefold() for keyword in menu["keywords"]),
+                menu["title"],
+                tuple((item["label"], item["command"], item["face_id"]) for item in menu["items"]),
+            )
+            for menu in menus
+        ]
 
     def _config_get(self, key: str, default: Any) -> Any:
         if hasattr(self.config, "get"):
@@ -624,20 +827,40 @@ class ReactMenuPlugin(Star):
 
         return items
 
-    def _find_active_menu_for_group(self, group_id: str) -> tuple[str, dict[str, Any]] | tuple[None, None]:
+    def _find_active_menu_for_group(
+        self, group_id: str, session_id: str | None = None, menu_id: str | None = None
+    ) -> dict[str, Any] | None:
         now = time.time()
         active = [
-            (mid, data)
-            for mid, data in self._active_menus.items()
-            if data.get("group_id") == group_id and now - data["created_at"] <= self.menu_timeout
+            data for data in self._active_menus.values()
+            if data.get("group_id") == group_id
+            and (session_id is None or data.get("session_id") == session_id)
+            and (menu_id is None or data.get("menu_id") == menu_id)
+            and now - data["created_at"] <= data.get("timeout", self.menu_timeout)
         ]
         if not active:
-            return None, None
-        return max(active, key=lambda pair: pair[1]["created_at"])
+            return None
+        return max(active, key=lambda data: data["created_at"])
 
-    def _has_active_menu_in_group(self, group_id: str) -> bool:
-        menu_id, menu_data = self._find_active_menu_for_group(group_id)
-        return menu_data is not None
+    def _find_active_menu_for_selection(
+        self, group_id: str, session_id: str, text: str
+    ) -> dict[str, Any] | None:
+        now = time.time()
+        active = [
+            data for data in self._active_menus.values()
+            if data.get("group_id") == group_id
+            and data.get("session_id") == session_id
+            and now - data["created_at"] <= data.get("timeout", self.menu_timeout)
+        ]
+        if not active:
+            return None
+        latest = max(active, key=lambda data: data["created_at"])
+        return latest if self._match_menu_item(text, latest.get("items", [])) else None
+
+    def _has_active_menu_in_group(
+        self, group_id: str, session_id: str | None = None, menu_id: str | None = None
+    ) -> bool:
+        return self._find_active_menu_for_group(group_id, session_id, menu_id) is not None
 
     def _match_menu_item(self, text: str, items: list[dict[str, str]]) -> dict[str, str] | None:
         normalized = text.strip().lower()
@@ -685,10 +908,13 @@ class ReactMenuPlugin(Star):
         while True:
             await asyncio.sleep(60)
             now = time.time()
-            expired = [mid for mid, data in self._active_menus.items() if now - data["created_at"] > self.menu_timeout]
-            for mid in expired:
-                self._active_menus.pop(mid, None)
-                logger.debug(f"[react_menu] 清理过期菜单: message_id={mid}")
+            expired = [
+                key for key, data in self._active_menus.items()
+                if now - data["created_at"] > data.get("timeout", self.menu_timeout)
+            ]
+            for key in expired:
+                self._active_menus.pop(key, None)
+                logger.debug(f"[react_menu] 清理过期菜单: message_id={key[1]}")
 
             self._debounce = {
                 key: stamp
@@ -702,14 +928,14 @@ class ReactMenuPlugin(Star):
                 if now - ts < 30
             }
 
-    def _build_text_menu(self, items: list[dict[str, str]]) -> str:
+    def _build_text_menu(self, menu: dict[str, Any]) -> str:
         lines = []
         if self.menu_header_image_url:
             lines.append(f"[CQ:image,file={self.menu_header_image_url}]")
             lines.append("")
-        lines.append(self.menu_title)
+        lines.append(menu["title"])
         lines.append(self.menu_divider_char * self.menu_divider_length)
-        for index, item in enumerate(items, start=1):
+        for index, item in enumerate(menu["items"], start=1):
             lines.append(f"  {index}. {item['label']}")
         lines.append(self.menu_divider_char * self.menu_divider_length)
         if self.menu_footer_text:
@@ -731,7 +957,7 @@ class ReactMenuPlugin(Star):
             except Exception:
                 pass
 
-    async def _send_menu(self, event: AstrMessageEvent, menu_text: str) -> bool:
+    async def _send_menu(self, event: AstrMessageEvent, menu: dict[str, Any]) -> bool:
         bot = self._get_bot(event)
         if bot is None:
             return False
@@ -739,7 +965,7 @@ class ReactMenuPlugin(Star):
         try:
             response = await bot.send_group_msg(
                 group_id=int(event.get_group_id()),
-                message=menu_text,
+                message=self._build_text_menu(menu),
             )
         except Exception as exc:
             logger.error(f"[react_menu] 发送菜单失败: {exc}")
@@ -752,7 +978,7 @@ class ReactMenuPlugin(Star):
             self._stop_event(event)
             return False
 
-        items = self._assign_face_ids(self.menu_items)
+        items = self._assign_face_ids(menu["items"])
         if self.menu_max_reactions > 0:
             emoji_items = [item for item in items if item.get("face_id")][: self.menu_max_reactions]
         else:
@@ -761,9 +987,14 @@ class ReactMenuPlugin(Star):
             item["face_id"]: {"command": item["command"], "label": item["label"]}
             for item in emoji_items
         }
-        self._active_menus[message_id] = {
+        session_id = self._resolve_session_identity(event, str(event.get_group_id()))
+        active_key = (session_id, message_id)
+        self._active_menus[active_key] = {
             "group_id": str(event.get_group_id()),
+            "session_id": session_id,
+            "menu_id": menu["menu_id"],
             "created_at": time.time(),
+            "timeout": self.menu_timeout,
             "emoji_map": emoji_map,
             "items": items,
         }
@@ -786,19 +1017,11 @@ class ReactMenuPlugin(Star):
         self._stop_event(event)
         return True
 
-    @filter.command("菜单")
-    async def on_menu_command(self, event: AstrMessageEvent):
-        if not event.get_group_id():
-            return
-
-        menu_text = self._build_text_menu(self.menu_items)
-        if not await self._send_menu(event, menu_text):
-            yield event.plain_result(menu_text)
-
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
     async def on_group_message(self, event: AstrMessageEvent):
         if not event.get_group_id():
             return
+        session_id = self._resolve_session_identity(event, str(event.get_group_id()))
 
         # ━━━ 三重防护：跳过 react_menu 自身推入的虚拟事件，防止无限循环 ━━━
         # 方式1: raw_message dict 检查（正常路径）
@@ -831,7 +1054,12 @@ class ReactMenuPlugin(Star):
         # 方式4: 兜底——平台可能会在 commit_event 后丢失 raw_message 的标记，
         #         此时检查最近虚拟命令记录，若匹配则跳过
         try:
-            recent_key = (str(event.get_group_id()), str(event.get_sender_id() or ""), str(event.message_str or ""))
+            recent_key = (
+                session_id,
+                str(event.get_group_id()),
+                str(event.get_sender_id() or ""),
+                str(event.message_str or ""),
+            )
             if recent_key in self._recent_virtual_commands:
                 logger.debug("[react_menu] 跳过最近记录的虚拟命令，防止回环")
                 return
@@ -842,23 +1070,30 @@ class ReactMenuPlugin(Star):
         if not text:
             return
 
-        menu_keyword_set = {keyword.strip().lower() for keyword in self.menu_keywords if isinstance(keyword, str)}
-        if text.lower() not in menu_keyword_set:
-            _, menu_data = self._find_active_menu_for_group(str(event.get_group_id()))
+        configured_menus = self._menus_for_session(session_id)
+        if not configured_menus:
+            return
+        menu = self._menu_for_session_keyword(session_id, text)
+        if menu is None:
+            menu_data = self._find_active_menu_for_selection(
+                str(event.get_group_id()), session_id, text
+            )
             if menu_data and await self._handle_menu_selection(event, text, menu_data):
                 return
             return
 
         group_id = str(event.get_group_id())
-        if self.menu_repeat_block and self._has_active_menu_in_group(group_id):
+        if self.menu_repeat_block and self._has_active_menu_in_group(
+            group_id, session_id, menu["menu_id"]
+        ):
             logger.info(f"[react_menu] 菜单冷却阻断: group={group_id}")
             yield event.plain_result(self.menu_repeat_reply)
             self._stop_event(event)
             return
 
         logger.info(f"[react_menu] 纯文本菜单触发: text={text} user={event.get_sender_id()} group={group_id}")
-        menu_text = self._build_text_menu(self.menu_items)
-        if not await self._send_menu(event, menu_text):
+        menu_text = self._build_text_menu(menu)
+        if not await self._send_menu(event, menu):
             yield event.plain_result(menu_text)
 
     @filter.event_message_type(filter.EventMessageType.ALL)
@@ -916,13 +1151,16 @@ class ReactMenuPlugin(Star):
             )
             return
 
-        menu_data = self._active_menus.get(message_id)
+        session_id = self._resolve_session_identity(event, str(group_id))
+        if not self._menus_for_session(session_id):
+            return
+        menu_data = self._active_menus.get((session_id, message_id))
         if menu_data is None:
             return
 
         # 忽略过期菜单
-        if time.time() - menu_data["created_at"] > self.menu_timeout:
-            self._active_menus.pop(message_id, None)
+        if time.time() - menu_data["created_at"] > menu_data.get("timeout", self.menu_timeout):
+            self._active_menus.pop((session_id, message_id), None)
             return
 
         # 忽略菜单发送者自动贴表情引起的回调（在菜单创建后短时间内发生的 reaction）
@@ -943,7 +1181,7 @@ class ReactMenuPlugin(Star):
             logger.debug(f"[react_menu] 忽略机器人自身的 reaction: bot_id={bot_id} message_id={message_id}")
             return
 
-        debounce_key = (message_id, clicker_id, face_id)
+        debounce_key = (session_id, message_id, clicker_id, face_id)
         now = time.time()
         last = self._debounce.get(debounce_key)
         if last is not None and now - last < self.debounce_seconds:
@@ -1044,24 +1282,25 @@ class ReactMenuPlugin(Star):
 
     @staticmethod
     def _resolve_session_identity(event: AstrMessageEvent, group_id: str) -> str:
-        session = None
-        session = getattr(event, "unified_msg_origin", None) or getattr(event, "session_id", None)
-        if session:
-            return session
-
-        if hasattr(event, "get_platform_name"):
+        platform_id = None
+        if hasattr(event, "get_platform_id"):
             try:
-                platform_name = event.get_platform_name()
+                platform_id = event.get_platform_id()
             except Exception:
-                platform_name = None
-            if platform_name:
-                return f"{platform_name}:group_message:{group_id}"
+                platform_id = None
+        if platform_id:
+            return f"{platform_id!s}:GroupMessage:{group_id}"
 
-        platform_type = getattr(event, "platform_id", None)
-        if platform_type:
-            return f"{platform_type}:group_message:{group_id}"
+        session = getattr(event, "unified_msg_origin", None) or getattr(event, "session_id", None)
+        expected_suffix = f":GroupMessage:{group_id}"
+        if session and str(session).endswith(expected_suffix):
+            return str(session)
 
-        return f"aiocqhttp:group_message:{group_id}"
+        platform_id = getattr(event, "platform_id", None)
+        if platform_id:
+            return f"{platform_id!s}:GroupMessage:{group_id}"
+
+        return f"aiocqhttp:GroupMessage:{group_id}"
 
     @staticmethod
     def _is_react_operation(operation: Any) -> bool:
@@ -1075,6 +1314,7 @@ class ReactMenuPlugin(Star):
         return False
 
     async def _execute_as_user(self, event: AstrMessageEvent, user_id: str, group_id: str, command: str) -> None:
+        session_id = self._resolve_session_identity(event, group_id)
         if user_id and AstrBotMessage is not None and MessageMember is not None:
             try:
                 fake_msg = AstrBotMessage()
@@ -1090,7 +1330,7 @@ class ReactMenuPlugin(Star):
 
                 # 记录最近虚拟命令，防止平台在 commit_event 后去掉 raw 标记导致回环
                 try:
-                    key = (str(group_id), str(user_id), str(command))
+                    key = (session_id, str(group_id), str(user_id), str(command))
                     self._recent_virtual_commands[key] = time.time()
                 except Exception:
                     pass
@@ -1119,13 +1359,10 @@ class ReactMenuPlugin(Star):
                 logger.warning(f"[react_menu] 构造虚拟事件失败: {exc}")
 
         try:
-            session = getattr(event, "unified_msg_origin", None) or getattr(event, "session_id", None)
-            if not session:
-                session = self._resolve_session_identity(event, group_id)
             await self.context.send_message(
-                session=session,
+                session=session_id,
                 message_chain=MessageChain([Plain(command)]),
             )
-            logger.info(f"[react_menu] fallback 发送指令文本: session={session} cmd={command}")
+            logger.info(f"[react_menu] fallback 发送指令文本: session={session_id} cmd={command}")
         except Exception as exc:
             logger.error(f"[react_menu] 触发目标命令失败: {exc}")
