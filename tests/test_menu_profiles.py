@@ -24,6 +24,8 @@ def load_plugin():
         "asyncio": asyncio, "json": json, "random": random, "time": time,
         "logger": Mock(), "Star": type("Star", (), {"__init__": lambda self, context: None}),
         "StarTools": SimpleNamespace(get_data_dir=lambda name: None),
+        "AstrBotMessage": SimpleNamespace, "MessageMember": SimpleNamespace,
+        "Plain": lambda text: SimpleNamespace(text=text), "MessageChain": list,
         "filter": SimpleNamespace(
             event_message_type=lambda value: lambda method: method,
             EventMessageType=SimpleNamespace(GROUP_MESSAGE=1, ALL=2),
@@ -228,7 +230,7 @@ class EventTests(unittest.IsolatedAsyncioTestCase):
             get_platform_id=lambda: umo.split(":", 1)[0], get_group_id=lambda: "123",
             get_sender_id=lambda: "42", message_str=text, unified_msg_origin=umo,
             message_obj=SimpleNamespace(raw_message=raw or {}, message_id="input", self_id="999"),
-            stop_event=Mock(), plain_result=lambda text: text,
+            stop_event=Mock(), plain_result=lambda text: text, send=AsyncMock(),
         )
 
     async def test_real_group_handler_dispatches_and_blocks_unregistered_umo(self):
@@ -247,6 +249,124 @@ class EventTests(unittest.IsolatedAsyncioTestCase):
             event.unified_msg_origin = "incorrect:OtherMessage:notice"
             await self.obj._handle_reaction_event(event)
         self.assertEqual([call.args[-1] for call in self.obj._execute_as_user.await_args_list], ["/first", "/second", "/third"])
+
+
+class NavigationTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.parent = {**menu("main", "parent", A),
+                       "items": ["更多功能,/TOOLS,14", "外部功能,external_cmd,66", "返回本页,main,5"]}
+        self.child = {**menu("tools", "child A", A), "items": ["返回主菜单,main,14"]}
+        self.platform = SimpleNamespace(
+            create_event=Mock(side_effect=self.virtual_event), commit_event=Mock(),
+        )
+        self.context = SimpleNamespace(
+            get_platform_inst=Mock(return_value=self.platform), send_message=AsyncMock(),
+        )
+        self.obj = Plugin(self.context, config([self.parent, self.child, menu("tools", "child B", B)]))
+        self.obj._send_menu = AsyncMock(return_value=True)
+        self.activate(A, "10", self.obj._menu_for_session_keyword(A, "main"))
+
+    async def asyncTearDown(self):
+        self.obj._cleanup_task.cancel()
+        await asyncio.gather(self.obj._cleanup_task, return_exceptions=True)
+
+    @staticmethod
+    def virtual_event(message):
+        event = EventTests.event(A, message.message_str)
+        event.message_obj = message
+        return event
+
+    def activate(self, umo, mid, selected_menu):
+        self.obj._active_menus[(umo, mid)] = {
+            "group_id": "123", "session_id": umo, "menu_id": selected_menu["menu_id"],
+            "created_at": time.time() - 3, "timeout": 60, "items": selected_menu["items"],
+            "emoji_map": {item["face_id"]: item for item in selected_menu["items"] if item["face_id"]},
+        }
+
+    @staticmethod
+    def reaction(umo, mid="10"):
+        return EventTests.event(umo, raw={
+            "notice_type": "group_msg_reaction", "group_id": "123", "message_id": mid,
+            "user_id": "42", "emoji_id": "14", "self_id": "999",
+        })
+
+    async def test_text_selections_open_submenu_without_virtual_events(self):
+        for text in ("1", "更多功能"):
+            event = EventTests.event(A, text)
+            self.assertEqual([reply async for reply in self.obj.on_group_message(event)], [])
+            self.assertEqual(self.obj._send_menu.await_args.args[1]["name"], "child A")
+            event.stop_event.assert_called()
+        self.assertEqual(self.obj._send_menu.await_count, 2)
+        self.platform.commit_event.assert_not_called()
+        self.assertEqual(self.obj._recent_virtual_commands, {})
+
+    async def test_reactions_open_submenu_in_the_original_umo(self):
+        self.activate(B, "10", self.obj._normalize_menus([self.parent])[0])
+        for umo in (A, B, C):
+            await self.obj._handle_reaction_event(self.reaction(umo))
+        self.assertEqual([call.args[1]["name"] for call in self.obj._send_menu.await_args_list],
+                         ["child A", "child B"])
+        self.platform.commit_event.assert_not_called()
+
+    async def test_global_menus_can_navigate(self):
+        self.obj.config = {"global_settings": {"menus": [self.parent, self.child], "umo_menus": []}}
+        self.obj._load_menu_profiles()
+        self.activate(C, "10", self.obj._menu_for_session_keyword(C, "main"))
+        event = EventTests.event(C, "更多功能")
+        _ = [reply async for reply in self.obj.on_group_message(event)]
+        self.assertEqual(self.obj._send_menu.await_args.args[1]["name"], "child A")
+        self.platform.commit_event.assert_not_called()
+
+    async def test_submenu_uses_the_same_cooldown_as_direct_open(self):
+        self.activate(A, "11", self.obj._menu_for_session_keyword(A, "tools"))
+        # Text and reaction selection still refer to the original parent menu.
+        self.obj._active_menus[(A, "10")]["created_at"] = time.time() - 2
+        text_event = EventTests.event(A, "1")
+        self.assertEqual([reply async for reply in self.obj.on_group_message(text_event)], [])
+        text_event.send.assert_awaited_once_with(self.obj.menu_repeat_reply)
+        reaction = self.reaction(A)
+        await self.obj._handle_reaction_event(reaction)
+        reaction.send.assert_awaited_once_with(self.obj.menu_repeat_reply)
+        direct = EventTests.event(A, "tools")
+        self.assertEqual([reply async for reply in self.obj.on_group_message(direct)], [self.obj.menu_repeat_reply])
+        self.obj._send_menu.assert_not_awaited()
+        self.platform.commit_event.assert_not_called()
+
+    async def test_submenu_sends_plain_text_fallback(self):
+        self.obj._send_menu.return_value = False
+        expected = self.obj._build_text_menu(self.obj._menu_for_session_keyword(A, "tools"))
+        for event in (EventTests.event(A, "1"), self.reaction(A)):
+            if event.message_str:
+                _ = [reply async for reply in self.obj.on_group_message(event)]
+            else:
+                await self.obj._handle_reaction_event(event)
+            event.send.assert_awaited_once_with(expected)
+        self.platform.commit_event.assert_not_called()
+
+    async def test_external_commands_still_use_virtual_events_and_loop_guard(self):
+        event = EventTests.event(A, "2")
+        _ = [reply async for reply in self.obj.on_group_message(event)]
+        self.platform.commit_event.assert_called_once()
+        virtual = self.platform.commit_event.call_args.args[0]
+        message = virtual.message_obj
+        self.assertEqual((message.sender.user_id, message.group_id, message.message_str),
+                         ("42", "123", "/external_cmd"))
+        self.assertTrue(message.raw_message["_react_menu_internal"])
+        _ = [reply async for reply in self.obj.on_group_message(virtual)]
+        self.platform.commit_event.assert_called_once()
+        self.obj._send_menu.assert_not_awaited()
+
+    async def test_self_reference_and_return_links_do_not_recurse(self):
+        self.obj.menu_repeat_block = False
+        event = EventTests.event(A, "3")
+        _ = [reply async for reply in self.obj.on_group_message(event)]
+        self.assertEqual(self.obj._send_menu.await_args.args[1]["name"], "parent")
+        self.obj._active_menus.clear()
+        self.activate(A, "11", self.obj._menu_for_session_keyword(A, "tools"))
+        _ = [reply async for reply in self.obj.on_group_message(EventTests.event(A, "1"))]
+        self.assertEqual(self.obj._send_menu.await_args.args[1]["name"], "parent")
+        self.assertEqual(self.obj._send_menu.await_count, 2)
+        self.platform.commit_event.assert_not_called()
 
 
 if __name__ == "__main__":

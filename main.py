@@ -1067,6 +1067,22 @@ class ReactMenuPlugin(Star):
         self._stop_event(event)
         return True
 
+    async def _open_menu(
+        self, event: AstrMessageEvent, menu: dict[str, Any], group_id: str
+    ) -> str | None:
+        """Open a menu, returning any cooldown or plain-text fallback reply."""
+        session_id = self._resolve_session_identity(event, group_id)
+        if self.menu_repeat_block and self._has_active_menu_in_group(
+            group_id, session_id, menu["menu_id"]
+        ):
+            logger.info(f"[react_menu] 菜单冷却阻断: group={group_id}")
+            self._stop_event(event)
+            return self.menu_repeat_reply
+
+        if not await self._send_menu(event, menu):
+            return self._build_text_menu(menu)
+        return None
+
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
     async def on_group_message(self, event: AstrMessageEvent):
         if not event.get_group_id():
@@ -1133,18 +1149,10 @@ class ReactMenuPlugin(Star):
             return
 
         group_id = str(event.get_group_id())
-        if self.menu_repeat_block and self._has_active_menu_in_group(
-            group_id, session_id, menu["menu_id"]
-        ):
-            logger.info(f"[react_menu] 菜单冷却阻断: group={group_id}")
-            yield event.plain_result(self.menu_repeat_reply)
-            self._stop_event(event)
-            return
-
         logger.info(f"[react_menu] 纯文本菜单触发: text={text} user={event.get_sender_id()} group={group_id}")
-        menu_text = self._build_text_menu(menu)
-        if not await self._send_menu(event, menu):
-            yield event.plain_result(menu_text)
+        reply = await self._open_menu(event, menu, group_id)
+        if reply is not None:
+            yield event.plain_result(reply)
 
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def on_reaction_event(self, event: AstrMessageEvent):
@@ -1365,6 +1373,17 @@ class ReactMenuPlugin(Star):
 
     async def _execute_as_user(self, event: AstrMessageEvent, user_id: str, group_id: str, command: str) -> None:
         session_id = self._resolve_session_identity(event, group_id)
+        menu = self._menu_for_session_keyword(session_id, command)
+        if menu is not None:
+            # Opening a menu does not execute its items. Handle navigation here
+            # before creating a virtual event, which our loop guard would ignore.
+            logger.info(f"[react_menu] 菜单项打开菜单: user={user_id} group={group_id} command={command}")
+            reply = await self._open_menu(event, menu, group_id)
+            if reply is not None:
+                await event.send(event.plain_result(reply))
+            self._stop_event(event)
+            return
+
         if user_id and AstrBotMessage is not None and MessageMember is not None:
             try:
                 fake_msg = AstrBotMessage()
