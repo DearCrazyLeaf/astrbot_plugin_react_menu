@@ -17,21 +17,9 @@
             ],
             "title": "🎮 菜单",
             "items": [
-              {
-                "label": "每日老婆",
-                "command": "抽老婆",
-                "face_id": ""
-              },
-              {
-                "label": "今日小猪",
-                "command": "今日小猪",
-                "face_id": ""
-              },
-              {
-                "label": "随机VTB",
-                "command": "dd",
-                "face_id": ""
-              }
+              "每日老婆,抽老婆",
+              "今日小猪",
+              "随机VTB,dd"
             ]
           }
         ],
@@ -70,19 +58,9 @@
                 "description": "菜单项目",
                 "default": [],
                 "items": {
-                  "label": {
-                    "type": "string",
-                    "default": ""
-                  },
-                  "command": {
-                    "type": "string",
-                    "default": ""
-                  },
-                  "face_id": {
-                    "type": "string",
-                    "default": ""
-                  }
-                }
+                  "type": "string"
+                },
+                "hint": "每行填写 显示内容；需要映射不同指令时填写 显示内容,触发指令；末尾可选填 face_id"
               }
             }
           }
@@ -133,19 +111,9 @@
                 "description": "菜单项目",
                 "default": [],
                 "items": {
-                  "label": {
-                    "type": "string",
-                    "default": ""
-                  },
-                  "command": {
-                    "type": "string",
-                    "default": ""
-                  },
-                  "face_id": {
-                    "type": "string",
-                    "default": ""
-                  }
-                }
+                  "type": "string"
+                },
+                "hint": "每行填写 显示内容；需要映射不同指令时填写 显示内容,触发指令；末尾可选填 face_id"
               }
             }
           }
@@ -336,19 +304,9 @@
             "type": "list",
             "default": [],
             "items": {
-              "label": {
-                "type": "string",
-                "default": ""
-              },
-              "command": {
-                "type": "string",
-                "default": ""
-              },
-              "face_id": {
-                "type": "string",
-                "default": ""
-              }
-            }
+              "type": "string"
+            },
+            "hint": "兼容旧版菜单项目；每行填写 显示内容,触发指令"
           }
         }
       }
@@ -433,18 +391,7 @@
     "invisible": true,
     "default": [],
     "items": {
-      "label": {
-        "type": "string",
-        "default": ""
-      },
-      "command": {
-        "type": "string",
-        "default": ""
-      },
-      "face_id": {
-        "type": "string",
-        "default": ""
-      }
+      "type": "string"
     }
   },
   "_settings_grouped": {

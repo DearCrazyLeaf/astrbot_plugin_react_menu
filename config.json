@@ -10,21 +10,9 @@
         ],
         "title": "🎮 菜单",
         "items": [
-          {
-            "label": "每日老婆",
-            "command": "抽老婆",
-            "face_id": ""
-          },
-          {
-            "label": "今日小猪",
-            "command": "今日小猪",
-            "face_id": ""
-          },
-          {
-            "label": "随机VTB",
-            "command": "dd",
-            "face_id": ""
-          }
+          "每日老婆,抽老婆",
+          "今日小猪",
+          "随机VTB,dd"
         ]
       }
     ],

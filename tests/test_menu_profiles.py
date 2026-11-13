@@ -111,6 +111,44 @@ class ProfileTests(unittest.TestCase):
         data["global_settings"]["menus"] = []
         self.assertEqual(profile(data).global_menus, [])
 
+    def test_object_items_are_migrated_to_simple_strings(self):
+        class SavedConfig(dict):
+            save_config = Mock()
+
+        data = SavedConfig({
+            "global_settings": {
+                "menus": [{
+                    "name": "旧菜单",
+                    "keywords": ["菜单"],
+                    "title": "旧菜单",
+                    "items": [
+                        {"label": "每日老婆", "command": "抽老婆", "face_id": "14"},
+                        {"label": "今日小猪", "command": "今日小猪", "face_id": ""},
+                    ],
+                }],
+                "umo_menus": [],
+            }
+        })
+        obj = profile(data)
+        self.assertEqual(
+            data["global_settings"]["menus"][0]["items"],
+            ["每日老婆,抽老婆,14", "今日小猪"],
+        )
+        self.assertEqual(obj.global_menus[0]["items"][0]["face_id"], "14")
+        data.save_config.assert_called_once()
+        profile(data)
+        data.save_config.assert_called_once()
+
+    def test_simple_item_syntax_preserves_command_and_face_id(self):
+        obj = profile(config([{
+            **menu("open", "unused", A),
+            "items": ["显示名称,实际指令,66", "相同内容"],
+        }]))
+        self.assertEqual(obj.session_menus[A][0]["items"], [
+            {"label": "显示名称", "command": "实际指令", "face_id": "66"},
+            {"label": "相同内容", "command": "相同内容", "face_id": ""},
+        ])
+
     def test_schema_contains_only_one_card_level(self):
         schema = json.loads((ROOT / "_conf_schema.json").read_text(encoding="utf-8"))
         section = schema["global_settings"]["items"]
@@ -119,6 +157,9 @@ class ProfileTests(unittest.TestCase):
             self.assertEqual(section[key]["type"], "template_list")
             fields = section[key]["templates"]["menu"]["items"]
             self.assertNotIn("template_list", [field["type"] for field in fields.values()])
+            self.assertEqual(fields["items"]["items"]["type"], "string")
+            for entry in section[key]["default"]:
+                self.assertTrue(all(isinstance(item, str) for item in entry["items"]))
         self.assertEqual(section["umo_menus"]["templates"]["menu"]["items"]["umo"]["type"], "string")
         self.assertTrue(schema["session_settings"]["invisible"])
 
@@ -130,6 +171,8 @@ class OptionMigrationTests(unittest.IsolatedAsyncioTestCase):
 
         schema = json.loads((ROOT / "_conf_schema.json").read_text(encoding="utf-8"))
         data = SavedConfig(config())
+        # Keep this test focused on option migration; item migration is tested above.
+        data["global_settings"]["menus"][0]["items"] = ["global_cmd,global_cmd,14"]
         for name in ("interaction_settings", "appearance_settings", "reaction_settings"):
             data[name] = {key: copy.deepcopy(field["default"]) for key, field in schema[name]["items"].items()}
         data.update(menu_timeout_seconds=120, debounce_seconds=0, menu_repeat_block=False,

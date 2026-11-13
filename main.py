@@ -495,6 +495,8 @@ class ReactMenuPlugin(Star):
         settings = self._config_get("global_settings", {})
         settings = dict(settings) if isinstance(settings, dict) else {}
         changed = False
+        if self._migrate_menu_item_lists(settings):
+            changed = True
         defaults = self._normalize_menus(_DEFAULT_MENU_CONFIG)
         previous = self._normalize_menus(self._config_get("menus", []))
         legacy = self._legacy_menu()
@@ -534,6 +536,11 @@ class ReactMenuPlugin(Star):
             self.config["session_settings"] = {"sessions": []}
             changed = True
 
+        # The old nested session format is flattened above, so migrate its item
+        # objects in the same load before persisting the new WebUI shape.
+        if self._migrate_menu_item_lists(settings):
+            changed = True
+
         if changed:
             self.config["global_settings"] = settings
             if hasattr(self.config, "save_config"):
@@ -555,6 +562,26 @@ class ReactMenuPlugin(Star):
                     continue
                 grouped.setdefault(umo, []).append(entry)
         self.session_menus = {umo: self._normalize_menus(entries) for umo, entries in grouped.items()}
+
+    def _migrate_menu_item_lists(self, settings: dict[str, Any]) -> bool:
+        """Flatten object menu items before the WebUI's simple list editor sees them."""
+        changed = False
+        for menu_list_name in ("menus", "umo_menus"):
+            entries = settings.get(menu_list_name)
+            if not isinstance(entries, list):
+                continue
+            for menu in entries:
+                if not isinstance(menu, dict) or not isinstance(menu.get("items"), list):
+                    continue
+                converted = []
+                for item in menu["items"]:
+                    text = self._menu_item_to_text(item)
+                    if text:
+                        converted.append(text)
+                if converted != menu["items"]:
+                    menu["items"] = converted
+                    changed = True
+        return changed
 
     def _legacy_menu(self) -> list[dict[str, Any]]:
         items = self._normalize_menu_items(self._config_get("menu_items", None))
@@ -703,31 +730,54 @@ class ReactMenuPlugin(Star):
                 text = raw_value.strip()
                 if not text:
                     continue
-                label, command = self._split_menu_item_text(text)
+                label, command, face_id = self._split_menu_item_text(text)
                 if not label or not command:
                     continue
-                items.append({"label": label, "command": command, "face_id": ""})
+                items.append({"label": label, "command": command, "face_id": face_id})
                 continue
 
         return items
 
     @staticmethod
-    def _split_menu_item_text(text: str) -> tuple[str, str]:
+    def _menu_item_to_text(raw_value: Any) -> str:
+        if isinstance(raw_value, str):
+            return raw_value.strip()
+        if not isinstance(raw_value, dict):
+            return ""
+
+        label = str(raw_value.get("label", "")).strip()
+        command = str(raw_value.get("command", label or raw_value.get("desc", ""))).strip()
+        face_id = str(raw_value.get("face_id", "")).strip()
+        if not label and command:
+            label = command.lstrip("/")
+        if not command and label:
+            command = label
+        if not label or not command:
+            return ""
+        if label == command and not face_id:
+            return label
+        return ",".join(value for value in (label, command, face_id) if value)
+
+    @staticmethod
+    def _split_menu_item_text(text: str) -> tuple[str, str, str]:
         text = (text or "").strip()
         if not text:
-            return "", ""
+            return "", "", ""
 
         # 优先按逗号分隔
         for sep in (",", "，"):
             if sep in text:
-                left, right = text.split(sep, 1)
+                parts = text.split(sep, 2)
+                left = parts[0]
+                right = parts[1]
+                face_id = parts[2].strip() if len(parts) == 3 else ""
                 label = left.strip().lstrip("/")
                 command = right.strip()
                 if not label:
                     label = command.lstrip("/")
                 if not command:
                     command = label
-                return label, command
+                return label, command, face_id
 
         # 支持 `显示 / 指令` 或 `显示/指令`
         if "/" in text and text.find("/") > 0:
@@ -738,7 +788,7 @@ class ReactMenuPlugin(Star):
                 label = command.lstrip("/")
             if not command:
                 command = label
-            return label, command
+            return label, command, ""
 
         # 最后按第一个空格分隔为 label 和 command
         if " " in text:
@@ -749,9 +799,9 @@ class ReactMenuPlugin(Star):
                 label = command.lstrip("/")
             if not command:
                 command = label
-            return label, command
+            return label, command, ""
 
-        return text, text
+        return text, text, ""
 
     @staticmethod
     def _normalize_command(command: str) -> str:
