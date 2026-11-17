@@ -151,6 +151,35 @@ class ProfileTests(unittest.TestCase):
             {"label": "相同内容", "command": "相同内容", "face_id": ""},
         ])
 
+    def test_unicode_emoji_prefix_becomes_onebot_emoji_id(self):
+        obj = Plugin.__new__(Plugin)
+        items = obj._normalize_menu_items([
+            "🍚 今天吃啥,吃什么",
+            "☕️ 咖啡,咖啡",
+            "👍🏻 点赞,点赞",
+            "第二项,second",
+        ])
+        self.assertEqual(items, [
+            {"label": "🍚 今天吃啥", "command": "吃什么", "face_id": "127834"},
+            {"label": "☕️ 咖啡", "command": "咖啡", "face_id": "9749"},
+            {"label": "👍🏻 点赞", "command": "点赞", "face_id": "128077"},
+            {"label": "第二项", "command": "second", "face_id": ""},
+        ])
+        self.assertEqual(obj._match_menu_item("今天吃啥", items)["command"], "吃什么")
+
+    def test_unicode_emoji_in_face_pool_is_normalized(self):
+        obj = Plugin.__new__(Plugin)
+        self.assertEqual(obj._normalize_face_pool(["🍚", "14", "🍚"]), ["127834", "14"])
+
+    def test_explicit_unicode_emoji_stays_in_item_order_before_random_pool(self):
+        obj = Plugin.__new__(Plugin)
+        obj.face_pool = ["14", "66"]
+        items = obj._normalize_menu_items(["🍚 米饭,rice", "第二项,second", "第三项,third"])
+        assigned = obj._assign_face_ids(items)
+        self.assertEqual(assigned[0]["face_id"], "127834")
+        self.assertEqual([item["label"] for item in assigned], ["🍚 米饭", "第二项", "第三项"])
+        self.assertEqual(len({item["face_id"] for item in assigned}), 3)
+
     def test_schema_contains_only_one_card_level(self):
         schema = json.loads((ROOT / "_conf_schema.json").read_text(encoding="utf-8"))
         section = schema["global_settings"]["items"]

@@ -31,6 +31,24 @@ _DEFAULT_MENU_CONFIG = [{
     ],
 }]
 
+# NapCat's Unicode emoji table uses the Unicode code point as ``emoji_id``.
+# Keep the supported set local so the plugin does not depend on a NapCat
+# installation path at runtime.  The list is synchronized from
+# ``face_config.json``'s ``emoji`` section.
+_QQ_UNICODE_EMOJIS = (
+    "😊", "😌", "😚", "😓", "😰", "😝", "😁", "😜", "☺", "😉", "😍", "😔", "😄", "😏", "😒", "😳", "😘", "😭", "😱", "😂",
+    "💪", "👊", "👍", "☝", "👏", "✌", "👎", "🙏", "👌", "👈", "👉", "👆", "👇", "👀", "👃", "👄", "👂",
+    "🍚", "🍝", "🍜", "🍙", "🍧", "🍣", "🎂", "🍞", "🍔", "🍳", "🍟", "🍺", "🍻", "🍸", "☕", "🍎", "🍊", "🍓", "🍉",
+    "💊", "🚬", "🎄", "🌹", "🎉", "🌴", "💝", "🎀", "🎈", "🐚", "💍", "💣", "👑", "🔔", "⭐", "✨", "💨", "💦", "🔥",
+    "🏆", "💰", "💤", "⚡", "👣", "💩", "💉", "♨", "📫", "🔑", "🔒", "✈", "🚄", "🚗", "🚤", "🚲", "🐎", "🚀", "🚌", "⛵",
+    "👩", "👨", "👧", "👦", "🐵", "🐙", "🐷", "💀", "🐤", "🐨", "🐮", "🐔", "🐸", "👻", "🐛", "🐠", "🐶", "🐯", "👼", "🐧", "🐳", "🐭",
+    "👒", "👗", "💄", "👠", "👢", "🌂", "👜", "👙", "👕", "👟", "☁", "☀", "☔", "🌙", "⛄", "⭕", "❌", "❔", "❕", "☎",
+    "📷", "📱", "📠", "💻", "🎥", "🎤", "🔫", "💿", "💓", "♣", "🀄", "〽", "🎰", "🚥", "🚧", "🎸", "💈", "🛀", "🚽", "🏠", "⛪", "🏦", "🏥", "🏨", "🏧", "🏪", "🚹", "🚺",
+)
+_QQ_UNICODE_EMOJI_IDS: dict[str, str] = {
+    emoji: str(ord(emoji)) for emoji in _QQ_UNICODE_EMOJIS
+}
+
 try:
     from astrbot.api.platform import AstrBotMessage, MessageMember
 except ImportError:
@@ -696,12 +714,48 @@ class ReactMenuPlugin(Star):
     @staticmethod
     def _normalize_face_pool(raw: Any) -> list[str]:
         if isinstance(raw, list):
-            values = [str(value).strip() for value in raw if str(value).strip()]
+            values = [ReactMenuPlugin._normalize_face_id(value) for value in raw]
+            values = [value for value in values if value]
             return list(dict.fromkeys(values))
         if isinstance(raw, str):
-            values = [value.strip() for value in raw.replace("\n", " ").replace(",", " ").split() if value.strip()]
+            values = [
+                ReactMenuPlugin._normalize_face_id(value)
+                for value in raw.replace("\n", " ").replace(",", " ").split()
+                if value.strip()
+            ]
+            values = [value for value in values if value]
             return list(dict.fromkeys(values))
         return list(_DEFAULT_FACE_POOL)
+
+    @staticmethod
+    def _normalize_face_id(raw: Any) -> str:
+        """Convert a configured Unicode QQ emoji to its OneBot numeric ID."""
+        value = str(raw or "").strip()
+        if not value:
+            return ""
+        if value.isdigit():
+            return value
+        # Accept the common variation-selector form (for example ``☕️``).
+        if value.endswith("\ufe0f"):
+            value = value[:-1]
+        if value and 0x1F3FB <= ord(value[-1]) <= 0x1F3FF:
+            value = value[:-1]
+        return _QQ_UNICODE_EMOJI_IDS.get(value, str(raw).strip())
+
+    @staticmethod
+    def _leading_unicode_emoji(value: str) -> tuple[str, str]:
+        text = (value or "").strip()
+        if not text:
+            return "", ""
+        for emoji in sorted(_QQ_UNICODE_EMOJIS, key=len, reverse=True):
+            if text.startswith(emoji):
+                remainder = text[len(emoji):]
+                if remainder.startswith("\ufe0f"):
+                    remainder = remainder[1:]
+                if remainder and 0x1F3FB <= ord(remainder[0]) <= 0x1F3FF:
+                    remainder = remainder[1:]
+                return emoji, remainder.lstrip()
+        return "", text
 
     def _normalize_menu_items(self, raw: Any) -> list[dict[str, str]]:
         items: list[dict[str, str]] = []
@@ -716,7 +770,9 @@ class ReactMenuPlugin(Star):
             if isinstance(raw_value, dict):
                 label = str(raw_value.get("label", "")).strip()
                 command = str(raw_value.get("command", label or raw_value.get("desc", ""))).strip()
-                face_id = str(raw_value.get("face_id", "")).strip()
+                configured_face_id = self._normalize_face_id(raw_value.get("face_id", ""))
+                emoji, _ = self._leading_unicode_emoji(label)
+                face_id = configured_face_id or self._normalize_face_id(emoji)
                 if not label and command:
                     label = command.lstrip("/")
                 if not command and label:
@@ -747,7 +803,7 @@ class ReactMenuPlugin(Star):
 
         label = str(raw_value.get("label", "")).strip()
         command = str(raw_value.get("command", label or raw_value.get("desc", ""))).strip()
-        face_id = str(raw_value.get("face_id", "")).strip()
+        face_id = ReactMenuPlugin._normalize_face_id(raw_value.get("face_id", ""))
         if not label and command:
             label = command.lstrip("/")
         if not command and label:
@@ -773,6 +829,8 @@ class ReactMenuPlugin(Star):
                 face_id = parts[2].strip() if len(parts) == 3 else ""
                 label = left.strip().lstrip("/")
                 command = right.strip()
+                emoji, _ = ReactMenuPlugin._leading_unicode_emoji(label)
+                face_id = ReactMenuPlugin._normalize_face_id(face_id or emoji)
                 if not label:
                     label = command.lstrip("/")
                 if not command:
@@ -784,23 +842,31 @@ class ReactMenuPlugin(Star):
             left, right = text.split("/", 1)
             label = left.strip()
             command = right.strip()
+            emoji, _ = ReactMenuPlugin._leading_unicode_emoji(label)
             if not label:
                 label = command.lstrip("/")
             if not command:
                 command = label
-            return label, command, ""
+            return label, command, ReactMenuPlugin._normalize_face_id(emoji)
 
         # 最后按第一个空格分隔为 label 和 command
         if " " in text:
             left, right = text.split(" ", 1)
             label = left.strip()
             command = right.strip()
+            emoji, clean_label = ReactMenuPlugin._leading_unicode_emoji(label)
+            if emoji and not clean_label:
+                label = text
             if not label:
                 label = command.lstrip("/")
             if not command:
                 command = label
-            return label, command, ""
+            return label, command, ReactMenuPlugin._normalize_face_id(emoji)
 
+        emoji, clean_label = ReactMenuPlugin._leading_unicode_emoji(text)
+        if emoji:
+            label = clean_label or text
+            return label, label, ReactMenuPlugin._normalize_face_id(emoji)
         return text, text, ""
 
     @staticmethod
@@ -924,6 +990,9 @@ class ReactMenuPlugin(Star):
 
         for item in items:
             if normalized == item.get("label", "").strip().lower():
+                return item
+            _, clean_label = self._leading_unicode_emoji(item.get("label", ""))
+            if clean_label and normalized == clean_label.casefold():
                 return item
             command = item.get("command", "")
             normalized_command = self._normalize_command(command).strip().lower()
