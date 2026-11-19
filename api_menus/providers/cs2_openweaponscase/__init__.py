@@ -160,8 +160,7 @@ class CS2ProviderSpec(ProviderSpec):
         return limit if limit > 0 else None
 
     def mentions_owner(self, page: dict[str, Any]) -> bool:
-        state = page.get("state")
-        return isinstance(state, dict) and state.get("level") == "home"
+        return self.page_scope(page) == "user"
 
     def starts_user_flow(self, state: Any, action_id: str) -> bool:
         return isinstance(state, dict) and state.get("level") == "home" and action_id == "home:self_open"

@@ -653,8 +653,9 @@ class InteractiveMenuTests(unittest.IsolatedAsyncioTestCase):
         _, active = next(iter(self.obj._active_menus.items()))
         message = self.bot.messages[-1]
         self.assertEqual(active["timeout"], 17)
+        self.assertFalse(message.startswith("[CQ:at,"))
         self.assertTrue(message.startswith(
-            "[CQ:at,qq=42]\n\n[CQ:image,file=https://example.com/menu.png]\n\n"
+            "[CQ:image,file=https://example.com/menu.png]\n\n"
         ))
         self.assertEqual(message.count("======"), 2)
         self.assertTrue(message.endswith("全局菜单页尾"))
@@ -718,12 +719,12 @@ class InteractiveMenuTests(unittest.IsolatedAsyncioTestCase):
             for data in self.obj._active_menus.values()
         ))
 
-    async def test_home_menu_mentions_opener_but_private_pages_do_not(self):
+    async def test_home_menu_is_public_but_private_pages_mention_opener(self):
         await self.open_menu()
-        self.assertTrue(self.bot.messages[-1].startswith("[CQ:at,qq=42]\n\n"))
+        self.assertFalse(self.bot.messages[-1].startswith("[CQ:at,"))
 
         await self.select("1")
-        self.assertNotIn("[CQ:at,qq=", self.bot.messages[-1])
+        self.assertTrue(self.bot.messages[-1].startswith("[CQ:at,qq=42]\n\n"))
 
     async def test_quick_open_concurrency_limit_is_per_group_and_allows_existing_user(self):
         card = self.obj.config["global_settings"]["menus"][0]
@@ -807,7 +808,7 @@ class InteractiveMenuTests(unittest.IsolatedAsyncioTestCase):
 
         selection = self.event("1", user="77")
         self.assertEqual([reply async for reply in self.obj.on_group_message(selection)], [])
-        self.assertTrue(self.bot.messages[-1].startswith("[CQ:at,qq=77]\n\n"))
+        self.assertFalse(self.bot.messages[-1].startswith("[CQ:at,"))
         self.assertIn("CS2 开箱", self.bot.messages[-1])
         self.assertEqual(len(self.provider.page_options), 1)
         active = next(menu for menu in self.obj._active_menus.values() if menu.get("provider_id"))
@@ -857,6 +858,7 @@ class InteractiveMenuTests(unittest.IsolatedAsyncioTestCase):
     async def test_card_title_is_only_used_for_home_page(self):
         await self.open_menu()
         home_message = self.bot.messages[-1]
+        self.assertFalse(home_message.startswith("[CQ:at,"))
         self.assertIn("CS2 开箱", home_message)
         self.assertIn("1. 快速开箱", home_message)
         self.assertIn("3. 开箱帮助", home_message)
@@ -865,6 +867,7 @@ class InteractiveMenuTests(unittest.IsolatedAsyncioTestCase):
         event = self.event("1")
         _ = [reply async for reply in self.obj.on_group_message(event)]
         submenu_message = self.bot.messages[-1]
+        self.assertTrue(submenu_message.startswith("[CQ:at,qq=42]\n\n"))
         self.assertIn("选择开箱种类", submenu_message)
         self.assertNotIn("CS2 开箱", submenu_message)
 
@@ -932,6 +935,11 @@ class InteractiveMenuTests(unittest.IsolatedAsyncioTestCase):
         for _ in range(3):
             event = self.event("1")
             _ = [reply async for reply in self.obj.on_group_message(event)]
+        self.assertFalse(self.bot.messages[0].startswith("[CQ:at,"))
+        self.assertTrue(all(
+            message.startswith("[CQ:at,qq=42]\n\n")
+            for message in self.bot.messages[1:]
+        ))
         user_flow_key, user_flow = next(
             (key, flow) for key, flow in self.obj._api_menus.flows.items() if key[-1] == "user"
         )
