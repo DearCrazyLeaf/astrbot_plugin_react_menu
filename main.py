@@ -12,7 +12,12 @@ from astrbot.api.message_components import Plain
 from astrbot.api.star import Context, Star, StarTools
 from astrbot.core.message.message_event_result import MessageChain
 
+from .api_menus.registry import provider_for_card
+from .api_menus.runtime import ApiMenuRuntime
+
 PLUGIN_ID = "astrbot_plugin_react_menu"
+REACT_MENU_CONSUMER_ID = "astrbot_plugin_react_menu"
+REACT_MENU_CONSUMER_API_VERSION = 1
 _OPTION_GROUPS = {
     "interaction_settings": ("menu_timeout_seconds", "debounce_seconds", "menu_repeat_block", "menu_repeat_reply"),
     "appearance_settings": ("menu_header_image_url", "menu_divider_char", "menu_divider_length", "menu_footer_text"),
@@ -470,6 +475,7 @@ class ReactMenuPlugin(Star):
         self.face_pool = self._normalize_face_pool(self._option_get("face_pool", []))
         self._load_menu_profiles()
         self._active_menus: dict[tuple[str, str], dict[str, Any]] = {}
+        self._api_menus = ApiMenuRuntime(self, logger)
         self._recent_virtual_commands: dict[tuple[str, str, str, str], float] = {}
         self._debounce: dict[tuple[str, str, str, str], float] = {}
         self._cleanup_task = asyncio.create_task(self._cleanup_loop())
@@ -482,6 +488,12 @@ class ReactMenuPlugin(Star):
         logger.info(
             f"[react_menu] 已加载，全局菜单={len(self.global_menus)} 会话配置={len(self.session_menus)} face_pool={len(self.face_pool)}"
         )
+
+    def get_interactive_menu_consumer_api_info(self) -> dict[str, Any]:
+        return {
+            "consumer_id": REACT_MENU_CONSUMER_ID,
+            "api_version": REACT_MENU_CONSUMER_API_VERSION,
+        }
 
     def _migrate_option_groups(self) -> None:
         if self._config_get("_settings_grouped", False):
@@ -513,7 +525,7 @@ class ReactMenuPlugin(Star):
         settings = self._config_get("global_settings", {})
         settings = dict(settings) if isinstance(settings, dict) else {}
         changed = False
-        if self._migrate_menu_item_lists(settings):
+        if self._migrate_menu_cards(settings):
             changed = True
         defaults = self._normalize_menus(_DEFAULT_MENU_CONFIG)
         previous = self._normalize_menus(self._config_get("menus", []))
@@ -556,7 +568,7 @@ class ReactMenuPlugin(Star):
 
         # The old nested session format is flattened above, so migrate its item
         # objects in the same load before persisting the new WebUI shape.
-        if self._migrate_menu_item_lists(settings):
+        if self._migrate_menu_cards(settings):
             changed = True
 
         if changed:
@@ -581,15 +593,20 @@ class ReactMenuPlugin(Star):
                 grouped.setdefault(umo, []).append(entry)
         self.session_menus = {umo: self._normalize_menus(entries) for umo, entries in grouped.items()}
 
-    def _migrate_menu_item_lists(self, settings: dict[str, Any]) -> bool:
-        """Flatten object menu items before the WebUI's simple list editor sees them."""
+    def _migrate_menu_cards(self, settings: dict[str, Any]) -> bool:
+        """Upgrade provider cards and flatten legacy static option objects."""
         changed = False
         for menu_list_name in ("menus", "umo_menus"):
             entries = settings.get(menu_list_name)
             if not isinstance(entries, list):
                 continue
             for menu in entries:
-                if not isinstance(menu, dict) or not isinstance(menu.get("items"), list):
+                if not isinstance(menu, dict):
+                    continue
+                provider = provider_for_card(menu)
+                if provider is not None and provider.migrate_card(menu):
+                    changed = True
+                if not isinstance(menu.get("items"), list):
                     continue
                 converted = []
                 for item in menu["items"]:
@@ -625,9 +642,15 @@ class ReactMenuPlugin(Star):
         menus: list[dict[str, Any]] = []
         seen_ids: set[str] = set()
         seen_keywords: set[str] = set()
-        for index, value in enumerate(raw, start=1):
-            if not isinstance(value, dict):
-                continue
+        provider_keywords: set[str] = set()
+        entries = [
+            (index, card, provider_for_card(card))
+            for index, card in enumerate(raw, start=1)
+            if isinstance(card, dict)
+        ]
+        entries.sort(key=lambda entry: entry[2] is None)
+        for index, value, provider in entries:
+            provider_id = provider.provider_id if provider else ""
             keywords = value.get("keywords", [])
             if isinstance(keywords, str):
                 keywords = [keywords]
@@ -641,24 +664,33 @@ class ReactMenuPlugin(Star):
                 if keyword and normalized not in menu_keywords:
                     clean_keywords.append(keyword)
                     menu_keywords.add(normalized)
-            clean_keywords = [
-                keyword for keyword in clean_keywords
-                if keyword.casefold() not in seen_keywords
-            ]
+            if not provider_id:
+                for keyword in clean_keywords:
+                    if keyword.casefold() in provider_keywords:
+                        logger.warning(
+                            f"[react_menu] 关键词“{keyword}”已由 API 菜单占用，静态菜单不再使用该关键词"
+                        )
+            clean_keywords = [keyword for keyword in clean_keywords if keyword.casefold() not in seen_keywords]
             items = self._normalize_menu_items(value.get("items", []))
-            if not clean_keywords or not items:
+            if not clean_keywords or (not items and not provider_id):
                 continue
             menu_id = str(value.get("menu_id") or clean_keywords[0].casefold()).strip()
             if menu_id in seen_ids:
                 menu_id = f"{menu_id}:{index}"
             seen_ids.add(menu_id)
             seen_keywords.update(keyword.casefold() for keyword in clean_keywords)
+            if provider_id:
+                provider_keywords.update(keyword.casefold() for keyword in clean_keywords)
+            layout = provider.layout_for_card(value, self._normalize_menu_items) if provider else {}
             menus.append({
                 "menu_id": menu_id,
                 "name": str(value.get("name") or f"菜单 {index}").strip(),
                 "keywords": clean_keywords,
                 "title": str(value.get("title") or value.get("name") or "互动菜单"),
                 "items": items,
+                "provider_id": provider_id,
+                "provider_options": provider.options_for_card(value, layout) if provider else {},
+                "provider_layout": layout,
             })
         return menus
 
@@ -959,13 +991,20 @@ class ReactMenuPlugin(Star):
         return max(active, key=lambda data: data["created_at"])
 
     def _find_active_menu_for_selection(
-        self, group_id: str, session_id: str, text: str
+        self, group_id: str, session_id: str, text: str, user_id: str | None = None
     ) -> dict[str, Any] | None:
         now = time.time()
         active = [
             data for data in self._active_menus.values()
             if data.get("group_id") == group_id
             and data.get("session_id") == session_id
+            and (
+                not data.get("provider_id")
+                or (
+                    self._api_menus.can_select(data, user_id or "")
+                    and self._api_menus.is_current(data)
+                )
+            )
             and now - data["created_at"] <= data.get("timeout", self.menu_timeout)
         ]
         if not active:
@@ -1006,14 +1045,19 @@ class ReactMenuPlugin(Star):
         if item is None:
             return False
 
-        command = item.get("command", "").strip()
-        if not command:
-            return False
-
         group_id = str(event.get_group_id())
         user_id = str(event.get_sender_id() or "")
         if not user_id:
             logger.debug("[react_menu] 选择菜单项但无法获取用户ID")
+            return False
+
+        if menu_data.get("provider_id"):
+            await self._api_menus.handle_selection(event, user_id, group_id, menu_data, item)
+            self._stop_event(event)
+            return True
+
+        command = item.get("command", "").strip()
+        if not command:
             return False
 
         logger.info(
@@ -1035,6 +1079,8 @@ class ReactMenuPlugin(Star):
                 self._active_menus.pop(key, None)
                 logger.debug(f"[react_menu] 清理过期菜单: message_id={key[1]}")
 
+            self._api_menus.expire(now, self.menu_timeout)
+
             self._debounce = {
                 key: stamp
                 for key, stamp in self._debounce.items()
@@ -1049,6 +1095,10 @@ class ReactMenuPlugin(Star):
 
     def _build_text_menu(self, menu: dict[str, Any]) -> str:
         lines = []
+        mention_user_id = str(menu.get("mention_user_id") or "").strip()
+        if mention_user_id.isdigit():
+            lines.append(f"[CQ:at,qq={mention_user_id}]")
+            lines.append("")
         if self.menu_header_image_url:
             lines.append(f"[CQ:image,file={self.menu_header_image_url}]")
             lines.append("")
@@ -1103,7 +1153,11 @@ class ReactMenuPlugin(Star):
         else:
             emoji_items = [item for item in items if item.get("face_id")]
         emoji_map = {
-            item["face_id"]: {"command": item["command"], "label": item["label"]}
+            item["face_id"]: {
+                "command": item.get("command", ""),
+                "label": item["label"],
+                "api_action_id": item.get("api_action_id", ""),
+            }
             for item in emoji_items
         }
         session_id = self._resolve_session_identity(event, str(event.get_group_id()))
@@ -1116,7 +1170,19 @@ class ReactMenuPlugin(Star):
             "timeout": self.menu_timeout,
             "emoji_map": emoji_map,
             "items": items,
+            "message_id": message_id,
+            "provider_id": menu.get("provider_id", ""),
+            "provider_state": menu.get("provider_state"),
+            "provider_scope": menu.get("provider_scope"),
+            "provider_options": menu.get("provider_options", {}),
+            "provider_layout": menu.get("provider_layout", {}),
+            "provider_revision": menu.get("provider_revision"),
+            "owner_user_id": menu.get("owner_user_id", ""),
         }
+        if menu.get("provider_id") and not self._api_menus.record_sent_page(self._active_menus[active_key]):
+            # Another request replaced this page while the message was in flight.
+            self._active_menus.pop(active_key, None)
+            return True
 
         for item in emoji_items:
             face_id_str = item["face_id"]
@@ -1151,6 +1217,17 @@ class ReactMenuPlugin(Star):
         if not await self._send_menu(event, menu):
             return self._build_text_menu(menu)
         return None
+
+    async def _open_configured_menu(
+        self, event: AstrMessageEvent, menu: dict[str, Any], group_id: str, user_id: str
+    ) -> tuple[bool, str | None]:
+        """Open a static or API menu. False leaves the keyword to the command path."""
+        if not menu.get("provider_id"):
+            return True, await self._open_menu(event, menu, group_id)
+        handled, reply = await self._api_menus.try_open(event, menu, group_id, user_id)
+        if handled:
+            self._stop_event(event)
+        return handled, reply
 
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
     async def on_group_message(self, event: AstrMessageEvent):
@@ -1205,23 +1282,28 @@ class ReactMenuPlugin(Star):
         if not text:
             return
 
+        group_id = str(event.get_group_id())
         configured_menus = self._menus_for_session(session_id)
-        if not configured_menus:
-            return
         menu = self._menu_for_session_keyword(session_id, text)
-        if menu is None:
-            menu_data = self._find_active_menu_for_selection(
-                str(event.get_group_id()), session_id, text
-            )
-            if menu_data and await self._handle_menu_selection(event, text, menu_data):
-                return
+        user_id = str(event.get_sender_id() or "")
+        if menu is not None:
+            _, reply = await self._open_configured_menu(event, menu, group_id, user_id)
+            if reply is not None:
+                yield event.plain_result(reply)
             return
 
-        group_id = str(event.get_group_id())
-        logger.info(f"[react_menu] 纯文本菜单触发: text={text} user={event.get_sender_id()} group={group_id}")
-        reply = await self._open_menu(event, menu, group_id)
-        if reply is not None:
-            yield event.plain_result(reply)
+        handled, reply = await self._api_menus.check_unconfigured(event, text)
+        if handled:
+            if reply is not None:
+                self._stop_event(event)
+                yield event.plain_result(reply)
+            return
+
+        if not configured_menus:
+            return
+        menu_data = self._find_active_menu_for_selection(group_id, session_id, text, user_id)
+        if menu_data:
+            await self._handle_menu_selection(event, text, menu_data)
 
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def on_reaction_event(self, event: AstrMessageEvent):
@@ -1279,10 +1361,10 @@ class ReactMenuPlugin(Star):
             return
 
         session_id = self._resolve_session_identity(event, str(group_id))
-        if not self._menus_for_session(session_id):
-            return
         menu_data = self._active_menus.get((session_id, message_id))
         if menu_data is None:
+            return
+        if not menu_data.get("provider_id") and not self._menus_for_session(session_id):
             return
 
         # 忽略过期菜单
@@ -1319,6 +1401,13 @@ class ReactMenuPlugin(Star):
         mapping = menu_data["emoji_map"].get(face_id)
         if mapping is None:
             logger.debug(f"[react_menu] 未映射的 face_id={face_id}")
+            return
+
+        if menu_data.get("provider_id"):
+            if not self._api_menus.can_select(menu_data, clicker_id):
+                return
+            await self._api_menus.handle_selection(event, clicker_id, str(group_id), menu_data, mapping)
+            self._stop_event(event)
             return
 
         command = mapping.get("command", "").strip()
@@ -1447,12 +1536,20 @@ class ReactMenuPlugin(Star):
             # Opening a menu does not execute its items. Handle navigation here
             # before creating a virtual event, which our loop guard would ignore.
             logger.info(f"[react_menu] 菜单项打开菜单: user={user_id} group={group_id} command={command}")
-            reply = await self._open_menu(event, menu, group_id)
-            if reply is not None:
-                await event.send(event.plain_result(reply))
-            self._stop_event(event)
-            return
+            handled, reply = await self._open_configured_menu(event, menu, group_id, user_id)
+            if handled:
+                if reply is not None:
+                    await event.send(event.plain_result(reply))
+                if not menu.get("provider_id"):
+                    self._stop_event(event)
+                return
 
+        await self._dispatch_native_command(event, user_id, group_id, command)
+
+    async def _dispatch_native_command(
+        self, event: AstrMessageEvent, user_id: str, group_id: str, command: str
+    ) -> None:
+        session_id = self._resolve_session_identity(event, group_id)
         if user_id and AstrBotMessage is not None and MessageMember is not None:
             try:
                 fake_msg = AstrBotMessage()

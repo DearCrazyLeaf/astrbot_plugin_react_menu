@@ -53,6 +53,11 @@
 - 支持点击防抖与菜单过期
 - 以点击者身份触发目标插件指令
 - 失败时 fallback 发送等价指令文本
+- 支持接入 [CS2开箱模拟](https://github.com/DearCrazyLeaf/astrbot_plugin_openweaponscase) 插件，由本插件接管开箱命令并生成互动菜单
+
+**开箱模拟联动效果预览：**
+
+<img width="400" height="960" alt="gif_preview" src="https://github.com/user-attachments/assets/0ca0629b-1cf4-4fd4-bf2d-7d40649e370f" />
 
 ---
 
@@ -92,117 +97,23 @@
 | `appearance_settings.menu_footer_text` | string | `"👆 下方按顺序贴表情，第1个表情对应第1项，第2个表情对应第2项。也可直接回复序号或菜单内容触发。"` | 菜单最下方的说明文案；留空则隐藏 |
 | `menu_keywords`、`menu_title`、`menu_items`、顶层 `menus` | 兼容字段 | 隐藏 | 用于迁移旧版菜单配置；新配置请使用全局菜单设置分区 |
 
-### 示例配置
+### CS2 开箱 API 菜单
 
-```json
-{
-  "global_settings": {
-    "menus": [
-      {
-        "__template_key": "menu",
-        "menu_id": "entertainment",
-        "name": "娱乐菜单",
-        "keywords": [
-          "菜单",
-          "娱乐"
-        ],
-        "title": "🎮 娱乐菜单",
-        "items": [
-          "每日老婆,抽老婆",
-          "今日小猪",
-          "随机VTB,dd"
-        ]
-      },
-      {
-        "__template_key": "menu",
-        "menu_id": "tools",
-        "name": "工具菜单",
-        "keywords": [
-          "工具"
-        ],
-        "title": "🧰 工具菜单",
-        "items": [
-          "查询帮助,帮助"
-        ]
-      }
-    ],
-    "umo_menus": [
-      {
-        "__template_key": "menu",
-        "umo": "aiocqhttp:GroupMessage:123456",
-        "menu_id": "group-tools",
-        "name": "群专属工具菜单",
-        "keywords": [
-          "工具"
-        ],
-        "title": "🧰 工具菜单",
-        "items": [
-          "查询帮助,帮助"
-        ]
-      }
-    ]
-  },
-  "interaction_settings": {
-    "menu_timeout_seconds": 60,
-    "debounce_seconds": 3,
-    "menu_repeat_block": true,
-    "menu_repeat_reply": "当前菜单已经生效，正在冷却中，直接点表情或发序号/内容即可触发~"
-  },
-  "appearance_settings": {
-    "menu_header_image_url": "",
-    "menu_divider_char": "─",
-    "menu_divider_length": 28,
-    "menu_footer_text": "点击下方对应表情，或回复序号/菜单名称触发查询"
-  },
-  "reaction_settings": {
-    "menu_max_reactions": 20,
-    "face_pool": [
-      "5",
-      "9",
-      "10",
-      "14",
-      "18",
-      "21",
-      "23",
-      "25",
-      "27",
-      "29",
-      "32",
-      "49",
-      "53",
-      "55",
-      "59",
-      "60",
-      "63",
-      "66",
-      "74",
-      "79",
-      "89",
-      "96",
-      "99",
-      "100",
-      "105",
-      "120",
-      "123",
-      "124",
-      "129",
-      "144",
-      "147",
-      "171",
-      "175",
-      "179",
-      "182",
-      "183",
-      "201"
-    ]
-  },
-  "menu_keywords": [],
-  "menus": [],
-  "menu_title": "",
-  "menu_items": [],
-  "_settings_grouped": true
-}
-```
+在全局菜单或 UMO 菜单中新增 “CS2开箱模拟 API 菜单” 模板即可，默认关键词为 `开箱` ，打开后显示群成员共同使用的主菜单，按钮依次为“快速开箱”“查看库存”“开箱帮助”“武器箱一览”“清空库存记录（个人）”“更新武器箱数据（管理员）”和“清理本地图片缓存（管理员）”；主菜单选择后不会撤回；进入快速开箱后，后续选择只允许发起该流程的用户操作，也可在同一菜单作用范围的普通菜单中添加 `CS开箱游戏,开箱`，通过该选项进入开箱主菜单；使用前需安装并启用 [CS2开箱模拟](https://github.com/DearCrazyLeaf/astrbot_plugin_openweaponscase)，并在其配置中开启 `enable_react_menu_api`（启用互动菜单 API）
+
+CS2 卡片按页面分成四组。各组的“菜单选项”和普通菜单用法一致，每行填写 `文案,指令`，可选第三列 `表情ID`；显示顺序与列表一致。在 WebUI 中可以逐项增删，也可以通过批量导入按所需顺序填写。
+
+| 设置分组 | 可以配置的内容 | 选项示例 |
+| --- | --- | --- |
+| 主菜单 | 标题、快速开箱入口、原生指令或其他菜单入口 | `快速开箱,api:home:self_open`、`查看库存,库存` |
+| 种类选择菜单 | 标题、种类选项和数量格式、取消提示 | `武器箱,api:category:case`、`取消选择,api:nav:cancel` |
+| 箱子列表菜单 | 标题、页码、当页物品的位置、翻页和返回选项 | `{item},api:items`、`下一页,api:nav:next`、`返回种类选择,api:nav:back` |
+| 数量选择菜单 | 标题、开箱数量及其文案、返回和取消选项 | `开 3 个,api:quantity:3`、`返回箱子选择,api:nav:back` |
+
+- 默认只提供武器箱、纪念包和收藏品。胶囊、涂鸦、布章不出现在默认选项里；开箱插件的 API 接口保留，后续有实际支持时再添加对应选项。
+- `api:` 选项只在开箱插件返回该动作时显示。例如，第一页不会显示“上一页”，超过插件单次上限的数量也不会显示。`{item},api:items` 会在该行位置展开当页的物品，不需要逐个填写名称；展开项的表情自动分配。
+- 新增普通功能时，直接在对应分组加一行 `我的功能,指令`，无需改代码。没有 `api:` 前缀的指令与普通菜单一致：若匹配同一会话范围内的菜单关键词，则打开该菜单；否则以点击者身份执行原生指令。开箱帮助、库存、武器箱列表和管理员操作仍由开箱插件处理。
+- 选择开箱数量后，数量菜单不会撤回。旧卡片的自定义标题、文案和数量会在插件加载时迁移到对应分组，无需重新添加卡片。
 
 ### 菜单卡片说明
 
@@ -253,6 +164,16 @@
 - 贴表情时会自动过滤已弃用/重复的 QQ 表情 ID，并按表情本身去重，保证同一个菜单内的表情不重复，从而避免因重复表情导致的菜单项无法点击触发
 
 ---
+
+## API 菜单接入规范
+
+在现有插件中增加 API 菜单时，目标插件提供页面和选项数据，表情互动菜单负责渲染、翻页、会话以及按操作者身份触发原生指令。CS2 开箱是仓库中的接入示例
+
+1. 在目标插件公开 `get_interactive_menu_api_info()`、`get_interactive_menu_page(state=None, display_options=None)` 和 `handle_interactive_menu_action(state, action_id, display_options=None)` ；元信息包含 `provider_id`、`api_version`、`enabled` 和 `supported_platforms` ；页面包含 `title`、`state` 和 `items`，每项提供 `label` 和 `action_id`
+2. 在 `api_menus/providers/<provider_id>/` 添加 `ProviderSpec` 和 `schema.json` ；适配器声明目标插件 ID、兼容 API 版本和平台，schema 声明触发词和可配置字段，将适配器加入 `api_menus/registry.py`
+3. 在插件根目录运行 `python tools/sync_menu_schema.py`，将模板同步到全局菜单与 UMO 菜单，提交前可用 `python tools/sync_menu_schema.py --check` 检查同步状态
+
+完整的返回格式、共享页与个人页约定、配置字段和接入示例见 [API 菜单开发者指南](docs/api-menu-provider-design.md)
 
 ## ❤️ 贡献者 | Contributors
 

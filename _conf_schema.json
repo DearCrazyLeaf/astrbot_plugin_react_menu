@@ -63,6 +63,175 @@
                 "hint": "每行填写 显示内容；需要映射不同指令时填写 显示内容,触发指令；项目开头可填写 Unicode 表情（如 🍚 今天吃啥,吃什么）；末尾也可选填数字 face_id"
               }
             }
+          },
+          "cs2_openweaponscase": {
+            "name": "CS2开箱模拟 API 菜单",
+            "display_item": "name",
+            "items": {
+              "menu_id": {
+                "type": "string",
+                "default": "cs2_openweaponscase",
+                "invisible": true
+              },
+              "name": {
+                "type": "string",
+                "description": "菜单名称",
+                "default": "CS2开箱模拟API菜单",
+                "hint": "仅用于识别这张配置卡片"
+              },
+              "keywords": {
+                "type": "list",
+                "description": "触发关键词",
+                "default": [
+                  "开箱"
+                ],
+                "items": {
+                  "type": "string"
+                },
+                "hint": "发送关键词后将调用 CS2开箱模拟 的 API 并使用该插件生成互动菜单"
+              },
+              "max_concurrent_users": {
+                "type": "int",
+                "description": "快速开箱并发人数上限",
+                "default": 3,
+                "min": 0,
+                "hint": "同一群聊中允许同时使用快速开箱的用户数；默认限制为 3 人；设置为 0 表示不限制；主菜单和普通指令不占用名额"
+              },
+              "home_menu": {
+                "type": "object",
+                "description": "主菜单",
+                "items": {
+                  "title": {
+                    "type": "string",
+                    "description": "主菜单标题",
+                    "default": "🔑 CS2 开箱模拟",
+                    "hint": "只用于主菜单页面标题，子菜单标题分别在下方各页面设置"
+                  },
+                  "items": {
+                    "type": "list",
+                    "description": "菜单选项",
+                    "default": [
+                      "快速开箱,api:home:self_open",
+                      "查看库存,库存",
+                      "开箱帮助,开箱菜单",
+                      "武器箱一览,武器箱列表",
+                      "清空库存记录（个人）,清除库存",
+                      "更新武器箱数据（管理员）,更新武器箱",
+                      "清理本地图片缓存（管理员）,清除缓存"
+                    ],
+                    "items": {
+                      "type": "string"
+                    },
+                    "hint": "每行格式为 文案,指令 或 文案,指令,表情ID；也可以在文案开头添加一个支持的 Unicode Emoji，例如 🍚 今天吃啥,吃什么，插件会自动将开头第一个 Emoji 转换为按钮表情并保留在文案中；普通指令会交给开箱插件执行；api:home:self_open 用于进入快速开箱流程；第三列表情ID可省略，省略时使用全局备用表情池；项目顺序决定序号和贴表情的对应关系，实际贴表情数受全局最大自动贴表情数量限制"
+                  }
+                }
+              },
+              "type_menu": {
+                "type": "object",
+                "description": "种类选择菜单",
+                "items": {
+                  "title": {
+                    "type": "string",
+                    "description": "页面标题",
+                    "default": "选择开箱种类",
+                    "hint": "显示在种类选择页面顶部的标题"
+                  },
+                  "option_template": {
+                    "type": "string",
+                    "description": "开箱种类选项格式",
+                    "default": "{label}（{count}）",
+                    "hint": "用 {label} 插入种类名称，用 {count} 插入该种类可选数量，例如 {label}（{count}）"
+                  },
+                  "items": {
+                    "type": "list",
+                    "description": "菜单选项",
+                    "default": [
+                      "武器箱,api:category:case",
+                      "纪念包,api:category:souvenir",
+                      "收藏品,api:category:collection",
+                      "取消选择,api:nav:cancel"
+                    ],
+                    "items": {
+                      "type": "string"
+                    },
+                    "hint": "每行格式为 文案,动作 或 文案,动作,表情ID；也可以在文案开头添加一个支持的 Unicode Emoji，插件会自动将开头第一个 Emoji 转换为按钮表情并保留在文案中；api:category:case 对应武器箱，api:category:souvenir 对应纪念包，api:category:collection 对应收藏品，api:nav:cancel 用于取消；可调整顺序或删除不需要的项目；第三列表情ID可省略，省略时使用全局备用表情池"
+                  },
+                  "cancel_reply_text": {
+                    "type": "string",
+                    "description": "取消后的提示",
+                    "default": "✅ 已取消 CS2 开箱",
+                    "hint": "用户选择 api:nav:cancel 后显示的回复内容"
+                  }
+                }
+              },
+              "case_menu": {
+                "type": "object",
+                "description": "箱子列表菜单",
+                "items": {
+                  "title_template": {
+                    "type": "string",
+                    "description": "开箱物品列表标题格式",
+                    "default": "选择{type}",
+                    "hint": "用于箱子列表或收藏品列表页面标题；{type} 会替换为当前开箱种类"
+                  },
+                  "page_indicator_template": {
+                    "type": "string",
+                    "description": "分页标题格式",
+                    "default": "（第 {current}/{total} 页）",
+                    "hint": "附加在列表标题后；{current} 表示当前页，{total} 表示总页数；留空不显示页数"
+                  },
+                  "items": {
+                    "type": "list",
+                    "description": "菜单选项",
+                    "default": [
+                      "{item},api:items",
+                      "上一页,api:nav:prev",
+                      "下一页,api:nav:next",
+                      "返回种类选择,api:nav:back",
+                      "取消选择,api:nav:cancel"
+                    ],
+                    "items": {
+                      "type": "string"
+                    },
+                    "hint": "每行格式为 文案,动作 或 文案,动作,表情ID；也可以在文案开头添加一个支持的 Unicode Emoji，插件会自动将开头第一个 Emoji 转换为按钮表情并保留在文案中；{item},api:items 会在该位置展开本页物品；api:nav:prev 和 api:nav:next 分别返回上一页和下一页；api:nav:back 返回种类选择，api:nav:cancel 取消流程；首页或末页不会显示不可用的翻页项；第三列表情ID可省略，省略时使用全局备用表情池"
+                  }
+                }
+              },
+              "quantity_menu": {
+                "type": "object",
+                "description": "数量选择菜单",
+                "items": {
+                  "title_template": {
+                    "type": "string",
+                    "description": "开箱数量页面标题",
+                    "default": "选择开箱数量：{item}",
+                    "hint": "显示在数量选择页面顶部；{item} 会替换为当前选中的箱子或收藏品名称"
+                  },
+                  "items": {
+                    "type": "list",
+                    "description": "菜单选项",
+                    "default": [
+                      "开 1 个,api:quantity:1",
+                      "开 5 个,api:quantity:5",
+                      "开 10 个,api:quantity:10",
+                      "开 20 个,api:quantity:20",
+                      "开 50 个,api:quantity:50",
+                      "返回箱子选择,api:nav:back",
+                      "取消选择,api:nav:cancel"
+                    ],
+                    "items": {
+                      "type": "string"
+                    },
+                    "hint": "每行格式为 文案,动作 或 文案,动作,表情ID；也可以在文案开头添加一个支持的 Unicode Emoji，插件会自动将开头第一个 Emoji 转换为按钮表情并保留在文案中；api:quantity:数字 设置对应抽取数量，例如 api:quantity:3 表示抽取 3 次；超过开箱插件单次上限的数量不会显示；api:nav:back 返回物品选择，api:nav:cancel 取消流程；数量项目可自行增删和排序；第三列表情ID可省略，省略时使用全局备用表情池"
+                  }
+                }
+              },
+              "provider_id": {
+                "type": "string",
+                "default": "cs2_openweaponscase",
+                "invisible": true
+              }
+            }
           }
         }
       },
@@ -116,9 +285,184 @@
                 "hint": "每行填写 显示内容；需要映射不同指令时填写 显示内容,触发指令；项目开头可填写 Unicode 表情（如 🍚 今天吃啥,吃什么）；末尾也可选填数字 face_id"
               }
             }
+          },
+          "cs2_openweaponscase": {
+            "name": "CS2开箱模拟 API 菜单",
+            "display_item": "name",
+            "items": {
+              "umo": {
+                "type": "string",
+                "description": "完整 UMO",
+                "default": "",
+                "hint": "填写 /sid 返回的完整群聊 UMO；同一 UMO 可重复填写以配置多个菜单"
+              },
+              "menu_id": {
+                "type": "string",
+                "default": "cs2_openweaponscase",
+                "invisible": true
+              },
+              "name": {
+                "type": "string",
+                "description": "菜单名称",
+                "default": "CS2开箱模拟API菜单",
+                "hint": "仅用于识别这张配置卡片"
+              },
+              "keywords": {
+                "type": "list",
+                "description": "触发关键词",
+                "default": [
+                  "开箱"
+                ],
+                "items": {
+                  "type": "string"
+                },
+                "hint": "发送关键词后将调用 CS2开箱模拟 的 API 并使用该插件生成互动菜单"
+              },
+              "max_concurrent_users": {
+                "type": "int",
+                "description": "快速开箱并发人数上限",
+                "default": 3,
+                "min": 0,
+                "hint": "同一群聊中允许同时使用快速开箱的用户数；默认限制为 3 人；设置为 0 表示不限制；主菜单和普通指令不占用名额"
+              },
+              "home_menu": {
+                "type": "object",
+                "description": "主菜单",
+                "items": {
+                  "title": {
+                    "type": "string",
+                    "description": "主菜单标题",
+                    "default": "🔑 CS2 开箱模拟",
+                    "hint": "只用于主菜单页面标题，子菜单标题分别在下方各页面设置"
+                  },
+                  "items": {
+                    "type": "list",
+                    "description": "菜单选项",
+                    "default": [
+                      "快速开箱,api:home:self_open",
+                      "查看库存,库存",
+                      "开箱帮助,开箱菜单",
+                      "武器箱一览,武器箱列表",
+                      "清空库存记录（个人）,清除库存",
+                      "更新武器箱数据（管理员）,更新武器箱",
+                      "清理本地图片缓存（管理员）,清除缓存"
+                    ],
+                    "items": {
+                      "type": "string"
+                    },
+                    "hint": "每行格式为 文案,指令 或 文案,指令,表情ID；也可以在文案开头添加一个支持的 Unicode Emoji，例如 🍚 今天吃啥,吃什么，插件会自动将开头第一个 Emoji 转换为按钮表情并保留在文案中；普通指令会交给开箱插件执行；api:home:self_open 用于进入快速开箱流程；第三列表情ID可省略，省略时使用全局备用表情池；项目顺序决定序号和贴表情的对应关系，实际贴表情数受全局最大自动贴表情数量限制"
+                  }
+                }
+              },
+              "type_menu": {
+                "type": "object",
+                "description": "种类选择菜单",
+                "items": {
+                  "title": {
+                    "type": "string",
+                    "description": "页面标题",
+                    "default": "选择开箱种类",
+                    "hint": "显示在种类选择页面顶部的标题"
+                  },
+                  "option_template": {
+                    "type": "string",
+                    "description": "开箱种类选项格式",
+                    "default": "{label}（{count}）",
+                    "hint": "用 {label} 插入种类名称，用 {count} 插入该种类可选数量，例如 {label}（{count}）"
+                  },
+                  "items": {
+                    "type": "list",
+                    "description": "菜单选项",
+                    "default": [
+                      "武器箱,api:category:case",
+                      "纪念包,api:category:souvenir",
+                      "收藏品,api:category:collection",
+                      "取消选择,api:nav:cancel"
+                    ],
+                    "items": {
+                      "type": "string"
+                    },
+                    "hint": "每行格式为 文案,动作 或 文案,动作,表情ID；也可以在文案开头添加一个支持的 Unicode Emoji，插件会自动将开头第一个 Emoji 转换为按钮表情并保留在文案中；api:category:case 对应武器箱，api:category:souvenir 对应纪念包，api:category:collection 对应收藏品，api:nav:cancel 用于取消；可调整顺序或删除不需要的项目；第三列表情ID可省略，省略时使用全局备用表情池"
+                  },
+                  "cancel_reply_text": {
+                    "type": "string",
+                    "description": "取消后的提示",
+                    "default": "✅ 已取消 CS2 开箱",
+                    "hint": "用户选择 api:nav:cancel 后显示的回复内容"
+                  }
+                }
+              },
+              "case_menu": {
+                "type": "object",
+                "description": "箱子列表菜单",
+                "items": {
+                  "title_template": {
+                    "type": "string",
+                    "description": "开箱物品列表标题格式",
+                    "default": "选择{type}",
+                    "hint": "用于箱子列表或收藏品列表页面标题；{type} 会替换为当前开箱种类"
+                  },
+                  "page_indicator_template": {
+                    "type": "string",
+                    "description": "分页标题格式",
+                    "default": "（第 {current}/{total} 页）",
+                    "hint": "附加在列表标题后；{current} 表示当前页，{total} 表示总页数；留空不显示页数"
+                  },
+                  "items": {
+                    "type": "list",
+                    "description": "菜单选项",
+                    "default": [
+                      "{item},api:items",
+                      "上一页,api:nav:prev",
+                      "下一页,api:nav:next",
+                      "返回种类选择,api:nav:back",
+                      "取消选择,api:nav:cancel"
+                    ],
+                    "items": {
+                      "type": "string"
+                    },
+                    "hint": "每行格式为 文案,动作 或 文案,动作,表情ID；也可以在文案开头添加一个支持的 Unicode Emoji，插件会自动将开头第一个 Emoji 转换为按钮表情并保留在文案中；{item},api:items 会在该位置展开本页物品；api:nav:prev 和 api:nav:next 分别返回上一页和下一页；api:nav:back 返回种类选择，api:nav:cancel 取消流程；首页或末页不会显示不可用的翻页项；第三列表情ID可省略，省略时使用全局备用表情池"
+                  }
+                }
+              },
+              "quantity_menu": {
+                "type": "object",
+                "description": "数量选择菜单",
+                "items": {
+                  "title_template": {
+                    "type": "string",
+                    "description": "开箱数量页面标题",
+                    "default": "选择开箱数量：{item}",
+                    "hint": "显示在数量选择页面顶部；{item} 会替换为当前选中的箱子或收藏品名称"
+                  },
+                  "items": {
+                    "type": "list",
+                    "description": "菜单选项",
+                    "default": [
+                      "开 1 个,api:quantity:1",
+                      "开 5 个,api:quantity:5",
+                      "开 10 个,api:quantity:10",
+                      "开 20 个,api:quantity:20",
+                      "开 50 个,api:quantity:50",
+                      "返回箱子选择,api:nav:back",
+                      "取消选择,api:nav:cancel"
+                    ],
+                    "items": {
+                      "type": "string"
+                    },
+                    "hint": "每行格式为 文案,动作 或 文案,动作,表情ID；也可以在文案开头添加一个支持的 Unicode Emoji，插件会自动将开头第一个 Emoji 转换为按钮表情并保留在文案中；api:quantity:数字 设置对应抽取数量，例如 api:quantity:3 表示抽取 3 次；超过开箱插件单次上限的数量不会显示；api:nav:back 返回物品选择，api:nav:cancel 取消流程；数量项目可自行增删和排序；第三列表情ID可省略，省略时使用全局备用表情池"
+                  }
+                }
+              },
+              "provider_id": {
+                "type": "string",
+                "default": "cs2_openweaponscase",
+                "invisible": true
+              }
+            }
           }
         },
-        "hint": "每张卡片定义一个会话菜单；同一 UMO 可添加多张菜单卡片。列表非空时，未登记会话不响应菜单"
+        "hint": "每张卡片定义一个会话菜单；同一 UMO 可添加多张菜单卡片；列表非空时，未登记会话不响应菜单"
       }
     }
   },
@@ -180,7 +524,7 @@
         "type": "string",
         "description": "菜单底部说明",
         "hint": "显示在菜单最下方的说明文字；留空则不显示",
-        "default": "👆 下方按顺序贴表情，第1个表情对应第1项，第2个表情对应第2项。也可直接回复序号或菜单内容触发。"
+        "default": "点击下方对应表情，或回复序号/菜单名称触发查询"
       }
     }
   },
