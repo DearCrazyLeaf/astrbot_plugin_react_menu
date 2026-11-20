@@ -53,7 +53,7 @@
 - 支持点击防抖与菜单过期
 - 以点击者身份触发目标插件指令
 - 失败时 fallback 发送等价指令文本
-- 支持接入 [CS2开箱模拟](https://github.com/DearCrazyLeaf/astrbot_plugin_openweaponscase) 插件，由本插件接管开箱命令并生成互动菜单
+- 支持接入 [CS2开箱模拟](https://github.com/luooka/astrbot_plugin_openweaponscase) 插件，由本插件接管开箱命令并生成互动菜单
 
 **开箱模拟联动效果预览：**
 
@@ -99,7 +99,7 @@
 
 ### CS2 开箱 API 菜单
 
-在全局菜单或 UMO 菜单中新增 “CS2开箱模拟 API 菜单” 模板即可，默认关键词为 `开箱` ，打开后显示群成员共同使用的主菜单，按钮依次为“快速开箱”“查看库存”“开箱帮助”“武器箱一览”“清空库存记录（个人）”“更新武器箱数据（管理员）”和“清理本地图片缓存（管理员）”；主菜单选择后不会撤回；进入快速开箱后，后续选择只允许发起该流程的用户操作，也可在同一菜单作用范围的普通菜单中添加 `CS开箱游戏,开箱`，通过该选项进入开箱主菜单；使用前需安装并启用 [CS2开箱模拟](https://github.com/DearCrazyLeaf/astrbot_plugin_openweaponscase)，并在其配置中开启 `enable_react_menu_api`（启用互动菜单 API）
+在全局菜单或 UMO 菜单中新增 “CS2开箱模拟 API 菜单” 模板即可，默认关键词为 `开箱` ，打开后显示群成员共同使用的主菜单，按钮依次为“快速开箱”“查看库存”“开箱帮助”“武器箱一览”“清空库存记录（个人）”“更新武器箱数据（管理员）”和“清理本地图片缓存（管理员）”；主菜单选择后不会撤回；进入快速开箱后，后续选择只允许发起该流程的用户操作；使用前需安装并启用 [CS2开箱模拟](https://github.com/luooka/astrbot_plugin_openweaponscase)，并在其配置中开启 `enable_react_menu_api`（启用互动菜单 API）
 
 CS2 卡片按页面分成四组。各组的“菜单选项”和普通菜单用法一致，每行填写 `文案,指令`，可选第三列 `表情ID`；显示顺序与列表一致。在 WebUI 中可以逐项增删，也可以通过批量导入按所需顺序填写。
 
@@ -139,8 +139,8 @@ CS2 卡片按页面分成四组。各组的“菜单选项”和普通菜单用�
 - `menu_max_reactions` 控制每张菜单自动贴表情的数量；如果菜单项更多，超出部分仍可通过序号或文本内容触发
 - `menu_header_image_url` 支持配置菜单头图链接；当配置后菜单将显示头图
 - `menu_divider_char` 与 `menu_divider_length` 用于控制菜单顶部/底部分割线样式
-- 文本命令会自动补 `/` 前缀，因此 `每日老婆` 与 `/每日老婆` 效果一致
-- 菜单项可以打开当前会话的其他菜单：例如目标菜单的触发词为 `工具`，项目填写 `更多功能,工具` 或 `更多功能,/工具` 即可；文字选择和表情点击均支持，目标菜单仍遵守菜单冷却设置
+- 菜单项目只需填写不带唤醒词的指令本体，插件会按目标 UMO 的 AstrBot 配置自动添加唤醒词；唤醒词列表为空时使用虚拟 @ 唤醒
+- 菜单项可以打开当前会话的其他菜单：例如目标菜单的触发词为 `工具`，项目填写 `更多功能,工具` 即可；文字选择和表情点击均支持，目标菜单仍遵守菜单冷却设置
 
 ---
 
@@ -165,9 +165,9 @@ CS2 卡片按页面分成四组。各组的“菜单选项”和普通菜单用�
 
 ---
 
-## API 菜单接入规范
+## 🔧 API 菜单接入规范
 
-在现有插件中增加 API 菜单时，目标插件提供页面和选项数据，表情互动菜单负责渲染、翻页、会话以及按操作者身份触发原生指令。CS2 开箱是仓库中的接入示例
+在现有插件中增加 API 菜单时，目标插件提供页面和选项数据，表情互动菜单负责渲染、翻页、会话以及按操作者身份触发原生指令；CS2 开箱是仓库中的接入示例
 
 1. 在目标插件公开 `get_interactive_menu_api_info()`、`get_interactive_menu_page(state=None, display_options=None)` 和 `handle_interactive_menu_action(state, action_id, display_options=None)` ；元信息包含 `provider_id`、`api_version`、`enabled` 和 `supported_platforms` ；页面包含 `title`、`state` 和 `items`，每项提供 `label` 和 `action_id`
 2. 在 `api_menus/providers/<provider_id>/` 添加 `ProviderSpec` 和 `schema.json` ；适配器声明目标插件 ID、兼容 API 版本和平台，schema 声明触发词和可配置字段，将适配器加入 `api_menus/registry.py`

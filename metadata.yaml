@@ -1,8 +1,8 @@
 name: astrbot_plugin_react_menu
 display_name: 表情互动菜单
-version: 1.1.0
+version: 1.1.1
 author: DearCrazyLeaf
-desc: 提供一个能集中管理框架中所有指令（aiocqhttp）的互动菜单，通过仿造官方机器人MarkDown按钮触发的形式，和可配置的指令列表，在发送关键词后生成一个贴有emoji表情的互动菜单，点击emoji即可触发配置的对应指令（模仿点击者来触发指令，支持大部分需要个人身份触发的情景）
+desc: 提供一个能集中管理框架中所有指令（aiocqhttp）的互动菜单，通过仿造官方机器人MarkDown按钮触发的形式，和可配置的指令列表，在发送关键词后生成一个贴有emoji表情的互动菜单，点击emoji即可触发配置的对应指令（模仿点击者来触发指令，支持大部分需要个人身份触发的情景）；支持使用仓库中的API规范为菜单提供API并编写模板实现双插件联动菜单功能，当前已适配：CS2开箱模拟插件(https://github.com/DearCrazyLeaf/astrbot_plugin_openweaponscase)
 support_platforms:
   - aiocqhttp
 repo: "https://github.com/DearCrazyLeaf/astrbot_plugin_react_menu"

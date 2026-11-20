@@ -32,7 +32,9 @@ def load_plugin():
         "logger": Mock(), "Star": type("Star", (), {"__init__": lambda self, context: None}),
         "StarTools": SimpleNamespace(get_data_dir=lambda name: None),
         "AstrBotMessage": SimpleNamespace, "MessageMember": SimpleNamespace,
-        "Plain": lambda text: SimpleNamespace(text=text), "MessageChain": list,
+        "MessageType": SimpleNamespace(GROUP_MESSAGE="GroupMessage"),
+        "Plain": lambda text: SimpleNamespace(text=text),
+        "At": lambda qq: SimpleNamespace(qq=qq),
         "filter": SimpleNamespace(
             event_message_type=lambda value: lambda method: method,
             EventMessageType=SimpleNamespace(GROUP_MESSAGE=1, ALL=2),
@@ -87,7 +89,8 @@ class ProfileTests(unittest.TestCase):
         obj = profile(config([menu("open", "first", A), menu("tools", "second", A), menu("open", "third", B)]))
         self.assertEqual(len(obj.session_menus[A]), 2)
         self.assertEqual(obj._menu_for_session_keyword(A, "open")["name"], "first")
-        self.assertEqual(obj._menu_for_session_keyword(A, "/tools")["name"], "second")
+        self.assertEqual(obj._menu_for_session_keyword(A, "tools")["name"], "second")
+        self.assertIsNone(obj._menu_for_session_keyword(A, "/tools"))
         self.assertEqual(obj._menu_for_session_keyword(B, "open")["name"], "third")
         self.assertIsNone(obj._menu_for_session_keyword(A, "global"))
         self.assertIsNone(obj._menus_for_session(C))
@@ -99,7 +102,7 @@ class ProfileTests(unittest.TestCase):
             self.assertFalse(obj._menus_for_session(A))
 
     def test_duplicate_keywords_are_scoped_to_umo(self):
-        obj = profile(config([menu("/Open", "first", A), menu("open", "second", A), menu("OPEN", "third", B)]))
+        obj = profile(config([menu("Open", "first", A), menu("open", "second", A), menu("OPEN", "third", B)]))
         self.assertEqual(len(obj.session_menus[A]), 1)
         self.assertEqual(obj._menu_for_session_keyword(B, "open")["name"], "third")
 
@@ -174,6 +177,13 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual(obj.session_menus[A][0]["items"], [
             {"label": "显示名称", "command": "实际指令", "face_id": "66"},
             {"label": "相同内容", "command": "相同内容", "face_id": ""},
+        ])
+
+    def test_slash_is_not_removed_from_commands_or_used_as_a_separator(self):
+        obj = Plugin.__new__(Plugin)
+        self.assertEqual(obj._normalize_command("/库存"), "/库存")
+        self.assertEqual(obj._normalize_menu_items(["显示/库存"]), [
+            {"label": "显示/库存", "command": "显示/库存", "face_id": ""},
         ])
 
     def test_unicode_emoji_prefix_becomes_onebot_emoji_id(self):
@@ -358,19 +368,20 @@ class EventTests(unittest.IsolatedAsyncioTestCase):
             event = self.event(umo, raw=raw)
             event.unified_msg_origin = "incorrect:OtherMessage:notice"
             await self.obj._handle_reaction_event(event)
-        self.assertEqual([call.args[-1] for call in self.obj._execute_as_user.await_args_list], ["/first", "/second", "/third"])
+        self.assertEqual([call.args[-1] for call in self.obj._execute_as_user.await_args_list], ["first", "second", "third"])
 
 
 class NavigationTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.parent = {**menu("main", "parent", A),
-                       "items": ["更多功能,/TOOLS,14", "外部功能,external_cmd,66", "返回本页,main,5"]}
+                       "items": ["更多功能,TOOLS,14", "外部功能,external_cmd,66", "返回本页,main,5"]}
         self.child = {**menu("tools", "child A", A), "items": ["返回主菜单,main,14"]}
         self.platform = SimpleNamespace(
             create_event=Mock(side_effect=self.virtual_event), commit_event=Mock(),
         )
         self.context = SimpleNamespace(
             get_platform_inst=Mock(return_value=self.platform), send_message=AsyncMock(),
+            get_config=Mock(return_value={"wake_prefix": ["/"]}),
         )
         self.obj = Plugin(self.context, config([self.parent, self.child, menu("tools", "child B", B)]))
         self.obj._send_menu = AsyncMock(return_value=True)
@@ -408,6 +419,7 @@ class NavigationTests(unittest.IsolatedAsyncioTestCase):
             event.stop_event.assert_called()
         self.assertEqual(self.obj._send_menu.await_count, 2)
         self.platform.commit_event.assert_not_called()
+        self.context.get_config.assert_not_called()
         self.assertEqual(self.obj._recent_virtual_commands, {})
 
     async def test_reactions_open_submenu_in_the_original_umo(self):
@@ -465,6 +477,52 @@ class NavigationTests(unittest.IsolatedAsyncioTestCase):
         _ = [reply async for reply in self.obj.on_group_message(virtual)]
         self.platform.commit_event.assert_called_once()
         self.obj._send_menu.assert_not_awaited()
+
+    async def test_native_dispatch_uses_target_group_config_instead_of_isolated_umo(self):
+        configs = {A: {"wake_prefix": ["!", "/"]}, B: {"wake_prefix": ["机器人 "]}}
+        self.context.get_config.side_effect = lambda *, umo: configs[umo]
+        for umo, expected in ((A, "!开箱 5 测试箱"), (B, "机器人 开箱 5 测试箱")):
+            with self.subTest(umo=umo):
+                event = EventTests.event(umo)
+                event.unified_msg_origin = umo.replace(":123", ":42_123")
+                await self.obj._dispatch_native_command(event, "77", "123", "开箱 5 测试箱")
+
+                self.context.get_config.assert_called_with(umo=umo)
+                self.context.get_platform_inst.assert_called_with(umo.split(":", 1)[0])
+                message = self.platform.commit_event.call_args.args[0].message_obj
+                self.assertEqual((message.type, message.session_id, message.sender.user_id),
+                                 ("GroupMessage", "123", "77"))
+                self.assertEqual(message.message_str, expected)
+                self.assertEqual(message.message, [SimpleNamespace(text=expected)])
+                event.send.assert_not_awaited()
+        self.assertEqual(self.platform.commit_event.call_count, 2)
+
+    async def test_native_dispatch_distinguishes_empty_prefix_from_no_prefixes(self):
+        for prefixes, mentions_bot in (([" ", "", "!"], False), ([], True)):
+            with self.subTest(prefixes=prefixes):
+                self.context.get_config.return_value = {"wake_prefix": prefixes}
+                event = EventTests.event(A)
+                await self.obj._dispatch_native_command(event, "42", "123", "库存")
+
+                message = self.platform.commit_event.call_args.args[0].message_obj
+                components = [SimpleNamespace(qq="999")] if mentions_bot else []
+                self.assertEqual(message.message, [*components, SimpleNamespace(text="库存")])
+                self.assertEqual(message.message_str, "库存")
+                event.send.assert_not_awaited()
+        self.assertEqual(self.platform.commit_event.call_count, 2)
+        self.context.send_message.assert_not_awaited()
+
+    async def test_native_dispatch_failure_is_reported_without_sending_command_text(self):
+        self.context.get_config.return_value = {"wake_prefix": []}
+        event = EventTests.event(A)
+        event.message_obj.self_id = ""
+        await self.obj._dispatch_native_command(event, "42", "123", "库存")
+
+        event.send.assert_awaited_once()
+        self.assertIn("无法执行菜单指令", event.send.await_args.args[0])
+        self.platform.commit_event.assert_not_called()
+        self.context.send_message.assert_not_awaited()
+        self.assertEqual(self.obj._recent_virtual_commands, {})
 
     async def test_self_reference_and_return_links_do_not_recurse(self):
         self.obj.menu_repeat_block = False
@@ -576,7 +634,9 @@ class InteractiveMenuTests(unittest.IsolatedAsyncioTestCase):
             root_dir_name="astrbot_plugin_openweaponscase",
             star_cls=self.provider,
         )
-        self.context = SimpleNamespace(get_all_stars=lambda: [metadata])
+        self.context = SimpleNamespace(
+            get_all_stars=lambda: [metadata], get_config=Mock(return_value={"wake_prefix": ["/"]}),
+        )
         api_menu = {"__template_key": "cs2_openweaponscase", "menu_id": "cs2_openweaponscase",
                     "name": "CS2 开箱", "keywords": ["开箱"], "home_menu": {"title": "CS2 开箱"}}
         self.obj = Plugin(self.context, {"global_settings": {"menus": [api_menu], "umo_menus": []}})
@@ -884,7 +944,7 @@ class InteractiveMenuTests(unittest.IsolatedAsyncioTestCase):
         other_user = self.event("2", user="77")
         _ = [reply async for reply in self.obj.on_group_message(other_user)]
         self.obj._dispatch_native_command.assert_awaited_with(
-            other_user, "77", "123", "/库存"
+            other_user, "77", "123", "库存"
         )
         self.assertIn(old_key, self.obj._active_menus)
         self.assertEqual(len(self.obj._active_menus), 2)
@@ -947,7 +1007,7 @@ class InteractiveMenuTests(unittest.IsolatedAsyncioTestCase):
         quantity_event = self.event("1")
         _ = [reply async for reply in self.obj.on_group_message(quantity_event)]
         self.assertEqual(self.obj._dispatch_native_command.await_args.args,
-                         (quantity_event, "42", "123", "/开箱 1 测试武器箱"))
+                         (quantity_event, "42", "123", "开箱 1 测试武器箱"))
         self.assertEqual(len(self.obj._api_menus.flows), 2)
         flow = next(
             value for key, value in self.obj._api_menus.flows.items()
@@ -982,12 +1042,12 @@ class InteractiveMenuTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_home_commands_dispatch_native_commands_in_display_order(self):
         selections = (
-            (2, "/库存"),
-            (3, "/开箱菜单"),
-            (4, "/武器箱列表"),
-            (5, "/清除库存"),
-            (6, "/更新武器箱"),
-            (7, "/清除缓存"),
+            (2, "库存"),
+            (3, "开箱菜单"),
+            (4, "武器箱列表"),
+            (5, "清除库存"),
+            (6, "更新武器箱"),
+            (7, "清除缓存"),
         )
         for number, command in selections:
             with self.subTest(number=number):
@@ -1003,6 +1063,23 @@ class InteractiveMenuTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len(self.obj._active_menus), 1)
                 self.assertEqual(self.bot.deleted, [])
                 self.obj._dispatch_native_command.reset_mock()
+
+    async def test_cs2_quick_open_dispatches_with_configured_wake_prefix(self):
+        del self.obj._dispatch_native_command
+        self.context.get_config.return_value = {"wake_prefix": ["!"]}
+        platform = SimpleNamespace(
+            create_event=Mock(side_effect=lambda message: message), commit_event=Mock(),
+        )
+        self.context.get_platform_inst = Mock(return_value=platform)
+        await self.open_menu()
+        for _ in range(4):
+            await self.select("1", user="77")
+
+        self.context.get_config.assert_called_once_with(umo="production-qq-bot:GroupMessage:123")
+        platform.commit_event.assert_called_once()
+        message = platform.commit_event.call_args.args[0]
+        self.assertEqual((message.sender.user_id, message.message_str), ("77", "!开箱 1 测试武器箱"))
+        self.assertEqual(len(self.obj._active_menus), 2)
 
     async def select(self, text, user="42"):
         event = self.event(text, user)
@@ -1044,7 +1121,7 @@ class InteractiveMenuTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("1. 新增功能", self.bot.messages[-1])
         self.assertNotIn("查看库存", self.bot.messages[-1])
         selection = await self.select("1", user="77")
-        self.obj._dispatch_native_command.assert_awaited_once_with(selection, "77", "123", "/新功能 参数")
+        self.obj._dispatch_native_command.assert_awaited_once_with(selection, "77", "123", "新功能 参数")
         self.obj._dispatch_native_command.reset_mock()
         active["created_at"] -= 2
         reaction = self.event(raw={
@@ -1052,7 +1129,7 @@ class InteractiveMenuTests(unittest.IsolatedAsyncioTestCase):
             "message_id": active["message_id"], "user_id": "88", "emoji_id": "14", "self_id": "999",
         })
         await self.obj._handle_reaction_event(reaction)
-        self.obj._dispatch_native_command.assert_awaited_once_with(reaction, "88", "123", "/新功能 参数")
+        self.obj._dispatch_native_command.assert_awaited_once_with(reaction, "88", "123", "新功能 参数")
         self.assertIn(key, self.obj._active_menus)
         self.assertEqual(self.bot.deleted, [])
         self.assertEqual(self.provider.actions, [])
@@ -1094,7 +1171,7 @@ class InteractiveMenuTests(unittest.IsolatedAsyncioTestCase):
         await self.obj._handle_reaction_event(reaction)
         self.obj._dispatch_native_command.assert_not_awaited()
         selection = await self.select("新增功能")
-        self.obj._dispatch_native_command.assert_awaited_once_with(selection, "42", "123", "/新功能")
+        self.obj._dispatch_native_command.assert_awaited_once_with(selection, "42", "123", "新功能")
 
     async def test_quantity_rows_keep_user_order_and_respect_provider_limit(self):
         self.configure_page("quantity_menu", items=[
@@ -1151,7 +1228,7 @@ class InteractiveMenuTests(unittest.IsolatedAsyncioTestCase):
                 {"step": "start"}, "history", {}
             )
             self.obj._dispatch_native_command.assert_awaited_once_with(
-                selection, "77", "123", "/查询记录"
+                selection, "77", "123", "查询记录"
             )
             self.assertEqual(len(self.bot.messages), 1)
 

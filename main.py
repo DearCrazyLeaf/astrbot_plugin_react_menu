@@ -8,9 +8,8 @@ from typing import Any
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.api.message_components import Plain
+from astrbot.api.message_components import At, Plain
 from astrbot.api.star import Context, Star, StarTools
-from astrbot.core.message.message_event_result import MessageChain
 
 from .api_menus.registry import provider_for_card
 from .api_menus.runtime import ApiMenuRuntime
@@ -55,10 +54,11 @@ _QQ_UNICODE_EMOJI_IDS: dict[str, str] = {
 }
 
 try:
-    from astrbot.api.platform import AstrBotMessage, MessageMember
+    from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
 except ImportError:
     AstrBotMessage = None  # type: ignore
     MessageMember = None  # type: ignore
+    MessageType = None  # type: ignore
 
 # Auto-generated from QFace QQ emoji index (https://koishi.js.org/QFace)
 # syncedAt: 2026-09-28T03:43:28.805Z
@@ -659,7 +659,7 @@ class ReactMenuPlugin(Star):
             clean_keywords: list[str] = []
             menu_keywords: set[str] = set()
             for raw_keyword in keywords:
-                keyword = str(raw_keyword).strip().lstrip("/").strip()
+                keyword = str(raw_keyword).strip()
                 normalized = keyword.casefold()
                 if keyword and normalized not in menu_keywords:
                     clean_keywords.append(keyword)
@@ -713,7 +713,7 @@ class ReactMenuPlugin(Star):
         menus = self._menus_for_session(session_id)
         if not menus:
             return None
-        normalized = (keyword or "").strip().lstrip("/").casefold()
+        normalized = (keyword or "").strip().casefold()
         return next(
             (menu for menu in menus if normalized in {value.casefold() for value in menu["keywords"]}),
             None,
@@ -806,7 +806,7 @@ class ReactMenuPlugin(Star):
                 emoji, _ = self._leading_unicode_emoji(label)
                 face_id = configured_face_id or self._normalize_face_id(emoji)
                 if not label and command:
-                    label = command.lstrip("/")
+                    label = command
                 if not command and label:
                     command = label
                 if not label or not command:
@@ -837,7 +837,7 @@ class ReactMenuPlugin(Star):
         command = str(raw_value.get("command", label or raw_value.get("desc", ""))).strip()
         face_id = ReactMenuPlugin._normalize_face_id(raw_value.get("face_id", ""))
         if not label and command:
-            label = command.lstrip("/")
+            label = command
         if not command and label:
             command = label
         if not label or not command:
@@ -859,27 +859,15 @@ class ReactMenuPlugin(Star):
                 left = parts[0]
                 right = parts[1]
                 face_id = parts[2].strip() if len(parts) == 3 else ""
-                label = left.strip().lstrip("/")
+                label = left.strip()
                 command = right.strip()
                 emoji, _ = ReactMenuPlugin._leading_unicode_emoji(label)
                 face_id = ReactMenuPlugin._normalize_face_id(face_id or emoji)
                 if not label:
-                    label = command.lstrip("/")
+                    label = command
                 if not command:
                     command = label
                 return label, command, face_id
-
-        # 支持 `显示 / 指令` 或 `显示/指令`
-        if "/" in text and text.find("/") > 0:
-            left, right = text.split("/", 1)
-            label = left.strip()
-            command = right.strip()
-            emoji, _ = ReactMenuPlugin._leading_unicode_emoji(label)
-            if not label:
-                label = command.lstrip("/")
-            if not command:
-                command = label
-            return label, command, ReactMenuPlugin._normalize_face_id(emoji)
 
         # 最后按第一个空格分隔为 label 和 command
         if " " in text:
@@ -890,7 +878,7 @@ class ReactMenuPlugin(Star):
             if emoji and not clean_label:
                 label = text
             if not label:
-                label = command.lstrip("/")
+                label = command
             if not command:
                 command = label
             return label, command, ReactMenuPlugin._normalize_face_id(emoji)
@@ -903,12 +891,7 @@ class ReactMenuPlugin(Star):
 
     @staticmethod
     def _normalize_command(command: str) -> str:
-        command = (command or "").strip()
-        if not command:
-            return ""
-        if not command.startswith("/"):
-            return "/" + command
-        return command
+        return (command or "").strip()
 
     @staticmethod
     def _face_name(face_id: str) -> str | None:
@@ -1027,6 +1010,7 @@ class ReactMenuPlugin(Star):
             if 0 <= index < len(items):
                 return items[index]
 
+        command_text = self._normalize_command(text).casefold()
         for item in items:
             if normalized == item.get("label", "").strip().lower():
                 return item
@@ -1034,8 +1018,7 @@ class ReactMenuPlugin(Star):
             if clean_label and normalized == clean_label.casefold():
                 return item
             command = item.get("command", "")
-            normalized_command = self._normalize_command(command).strip().lower()
-            if normalized == normalized_command or normalized == normalized_command.lstrip("/"):
+            if command_text and command_text == self._normalize_command(command).casefold():
                 return item
 
         return None
@@ -1063,7 +1046,7 @@ class ReactMenuPlugin(Star):
         logger.info(
             f"[react_menu] 菜单文本触发命令: user={user_id} group={group_id} text={text} command={command}"
         )
-        await self._execute_as_user(event, user_id, group_id, self._normalize_command(command))
+        await self._execute_as_user(event, user_id, group_id, command)
         self._stop_event(event)
         return True
 
@@ -1416,8 +1399,7 @@ class ReactMenuPlugin(Star):
             return
 
         logger.info(f"[react_menu] 触发菜单命令: user={clicker_id} face_id={face_id} -> {command}")
-        normalized = self._normalize_command(command)
-        await self._execute_as_user(event, clicker_id, group_id, normalized)
+        await self._execute_as_user(event, clicker_id, group_id, command)
         self._stop_event(event)
 
     def _parse_raw_message(self, event: AstrMessageEvent) -> dict[str, Any] | None:
@@ -1549,55 +1531,49 @@ class ReactMenuPlugin(Star):
     async def _dispatch_native_command(
         self, event: AstrMessageEvent, user_id: str, group_id: str, command: str
     ) -> None:
+        command = self._normalize_command(command)
+        if not command:
+            return
+
+        # Match the virtual event's group UMO before AstrBot isolates user sessions.
         session_id = self._resolve_session_identity(event, group_id)
-        if user_id and AstrBotMessage is not None and MessageMember is not None:
-            try:
-                fake_msg = AstrBotMessage()
-                fake_msg.self_id = getattr(event.message_obj, "self_id", None) or getattr(event, "self_id", None) or ""
-                fake_msg.sender = MessageMember(user_id=user_id, nickname=user_id)
-                fake_msg.type = getattr(event.message_obj, "type", None) or getattr(event, "message_type", None) or ""
-                fake_msg.group_id = group_id
-                fake_msg.session_id = group_id
-                fake_msg.message_id = f"react_menu_{int(time.time() * 1000)}_{user_id}"
-                fake_msg.message_str = command
-                fake_msg.message = [Plain(text=command)]
-                fake_msg.raw_message = {"_react_menu_internal": True}
-
-                # 记录最近虚拟命令，防止平台在 commit_event 后去掉 raw 标记导致回环
-                try:
-                    key = (session_id, str(group_id), str(user_id), str(command))
-                    self._recent_virtual_commands[key] = time.time()
-                except Exception:
-                    pass
-
-                platform_id = None
-                if hasattr(event, "get_platform_id"):
-                    try:
-                        platform_id = event.get_platform_id()
-                    except Exception:
-                        platform_id = None
-                if platform_id is None:
-                    platform_id = getattr(event, "platform_id", None)
-
-                platform = None
-                if platform_id is not None and hasattr(self.context, "get_platform_inst"):
-                    try:
-                        platform = self.context.get_platform_inst(platform_id)
-                    except Exception:
-                        platform = None
-                if platform is not None and hasattr(platform, "create_event") and hasattr(platform, "commit_event"):
-                    fake_event = platform.create_event(fake_msg)
-                    platform.commit_event(fake_event)
-                    logger.info(f"[react_menu] 已推入虚拟事件: user={user_id} cmd={command}")
-                    return
-            except Exception as exc:
-                logger.warning(f"[react_menu] 构造虚拟事件失败: {exc}")
-
         try:
-            await self.context.send_message(
-                session=session_id,
-                message_chain=MessageChain([Plain(command)]),
-            )
-            logger.info(f"[react_menu] fallback 发送指令文本: session={session_id} cmd={command}")
-        except Exception as exc:
-            logger.error(f"[react_menu] 触发目标命令失败: {exc}")
+            if not user_id or AstrBotMessage is None or MessageMember is None or MessageType is None:
+                raise RuntimeError("Virtual group messages or the operator identity are unavailable")
+            platform = self.context.get_platform_inst(session_id.split(":", 1)[0])
+            if platform is None:
+                raise RuntimeError("The target platform instance is unavailable")
+
+            prefixes = self.context.get_config(umo=session_id).get("wake_prefix")
+            if not isinstance(prefixes, list) or any(not isinstance(prefix, str) for prefix in prefixes):
+                raise ValueError("wake_prefix must be a list of strings")
+            # AstrBot strips leading whitespace before matching, and an empty string is valid.
+            wake_prefix = next((prefix for prefix in prefixes if prefix == prefix.lstrip()), None)
+            message_text = command if wake_prefix is None else wake_prefix + command
+            bot_id = getattr(event.message_obj, "self_id", None) or getattr(event, "self_id", None) or ""
+
+            fake_msg = AstrBotMessage()
+            fake_msg.self_id = bot_id
+            fake_msg.sender = MessageMember(user_id=user_id, nickname=user_id)
+            fake_msg.type = MessageType.GROUP_MESSAGE
+            fake_msg.group_id = group_id
+            fake_msg.session_id = group_id
+            fake_msg.message_id = f"react_menu_{int(time.time() * 1000)}_{user_id}"
+            fake_msg.message_str = message_text
+            fake_msg.message = [Plain(text=message_text)]
+            if wake_prefix is None:
+                if not bot_id:
+                    raise RuntimeError("The bot ID is required for virtual mention wake-up")
+                fake_msg.message.insert(0, At(qq=bot_id))
+            fake_msg.raw_message = {"_react_menu_internal": True}
+
+            platform.commit_event(platform.create_event(fake_msg))
+            key = (session_id, str(group_id), str(user_id), message_text)
+            self._recent_virtual_commands[key] = time.time()
+            logger.info(f"[react_menu] 已推入虚拟事件: user={user_id} cmd={message_text}")
+        except Exception:
+            logger.exception(f"[react_menu] 触发目标命令失败: session={session_id} cmd={command}")
+            try:
+                await event.send(event.plain_result("⚠️ 无法执行菜单指令，请检查 AstrBot 的唤醒词和平台配置"))
+            except Exception:
+                logger.debug("[react_menu] 发送指令失败提示时出错", exc_info=True)

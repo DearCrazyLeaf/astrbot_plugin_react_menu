@@ -446,7 +446,7 @@ class ApiMenuRuntime:
 
         if not action_id:
             try:
-                await self.host._execute_as_user(event, user_id, group_id, self.host._normalize_command(command))
+                await self.host._execute_as_user(event, user_id, group_id, command)
             finally:
                 if self.flows.get(flow_key) is flow:
                     flow["processing"] = False
@@ -500,7 +500,7 @@ class ApiMenuRuntime:
             if command:
                 try:
                     await self.host._dispatch_native_command(
-                        event, user_id, group_id, self.host._normalize_command(command)
+                        event, user_id, group_id, command
                     )
                 finally:
                     if self.flows.get(flow_key) is flow:
@@ -517,7 +517,7 @@ class ApiMenuRuntime:
         if isinstance(result, dict) and result.get("kind") == "command":
             command = str(result.get("command") or "").strip()
             if command:
-                await self.host._dispatch_native_command(event, user_id, group_id, self.host._normalize_command(command))
+                await self.host._dispatch_native_command(event, user_id, group_id, command)
                 return
             message = f"{name}插件未返回原生指令。"
         elif isinstance(result, dict) and result.get("kind") == "cancel":

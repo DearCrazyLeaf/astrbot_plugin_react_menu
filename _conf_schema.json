@@ -1,4 +1,10 @@
 {
+  "tips": {
+    "type": "object",
+    "description": "菜单项目配置Tips",
+    "hint": "插件会自动获取发送目标 UMO 配置的唤醒词，并拼接第一个可用的作为触发指令；唤醒词列表为空时会尝试 @ 方法唤起；在配置菜单项目时只需填写 `显示内容,指令,表情ID`（表情ID为可选项，可不填写），无需在指令前携带唤醒词",
+    "items": {}
+  },
   "global_settings": {
     "type": "object",
     "description": "全局菜单设置",
